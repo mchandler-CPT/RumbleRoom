@@ -55,6 +55,7 @@ private:
     std::atomic<float>* mCutoffParam { nullptr };
 
     juce::dsp::StateVariableTPTFilter<float> mFilter;
+    juce::dsp::StateVariableTPTFilter<float> mHPFilter;
     juce::LinearSmoothedValue<float> mSmoothedDelayTimeMs;
     juce::LinearSmoothedValue<float> mSmoothedFeedback;
     juce::LinearSmoothedValue<float> mSmoothedDryWet;

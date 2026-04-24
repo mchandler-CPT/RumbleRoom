@@ -96,6 +96,10 @@ void RumbleRoomAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     mFilter.reset();
     mFilter.prepare (spec);
     mFilter.setType (juce::dsp::StateVariableTPTFilterType::lowpass);
+    mHPFilter.reset();
+    mHPFilter.prepare (spec);
+    mHPFilter.setType (juce::dsp::StateVariableTPTFilterType::highpass);
+    mHPFilter.setCutoffFrequency (35.0f);
 
     const auto initialCutoff = juce::jlimit (20.0f, 20000.0f, mCutoffParam != nullptr ? mCutoffParam->load() : 1380.0f);
     const auto initialDelayMs = juce::jlimit (1.0f, 1000.0f, mDelayTimeParam != nullptr ? mDelayTimeParam->load() : 20.0f);
@@ -182,6 +186,7 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         const auto feedback = mSmoothedFeedback.getNextValue();
         const auto dryWet = mSmoothedDryWet.getNextValue();
         const auto grit = mSmoothedGrit.getNextValue();
+        const auto gritTiltOffset = juce::jmap (grit, 0.0f, 1.0f, 1.0f, 0.7f);
         float absInput = 0.0f;
         for (int inCh = 0; inCh < totalInputChannels; ++inCh)
             absInput = juce::jmax (absInput, std::abs (buffer.getSample (inCh, sample)));
@@ -192,11 +197,11 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             mEnvelopeLevel = releaseCoeff * mEnvelopeLevel + (1.0f - releaseCoeff) * absInput;
 
         const auto envModulation = mEnvelopeLevel * 4000.0f * dryWet;
-        const auto modulatedCutoff = juce::jlimit (20.0f, 20000.0f, smoothedCutoff + envModulation);
+        const auto modulatedCutoff = juce::jlimit (20.0f, 20000.0f, (smoothedCutoff * gritTiltOffset) + envModulation);
         mFilter.setCutoffFrequency (modulatedCutoff);
 
         const auto gritCurve = grit * grit;
-        const auto autoDampedFeedback = feedback * (1.0f - (gritCurve * 0.15f));
+        const auto autoDampedFeedback = feedback * (1.0f - (gritCurve * 0.4f));
         const auto dryGain = 1.0f - dryWet;
         const auto wetGain = dryWet;
         const auto delayTimeMs = mSmoothedDelayTimeMs.getNextValue();
@@ -206,7 +211,7 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
         mJitterAmount += (mRandom.nextFloat() * 2.0f - 1.0f) * 0.001f;
         mJitterAmount *= 0.999f;
-        const auto jitterSamples = mJitterAmount * grit * 5.0f;
+        const auto jitterSamples = mJitterAmount * grit * 2.5f;
 
         for (int channel = 0; channel < totalOutputChannels; ++channel)
         {
@@ -241,10 +246,27 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
             const auto grittySample = applyWarmSaturation (delayedSample, grit);
             const auto filteredSample = mFilter.processSample (channel % delayChannels, grittySample);
-            const auto feedbackPath = std::tanh (filteredSample * autoDampedFeedback) * 0.97f;
+            const auto hpFilteredSample = mHPFilter.processSample (channel % delayChannels, filteredSample);
+            const auto feedbackPath = std::tanh (hpFilteredSample * autoDampedFeedback) * 0.93f;
 
             delayData[mWritePosition] = inputSample + feedbackPath;
-            channelData[sample] = (inputSample * dryGain) + (filteredSample * wetGain);
+            auto mixedSample = (inputSample * dryGain) + (filteredSample * wetGain);
+
+            float clippedSample = 0.0f;
+            if (mixedSample >= 1.0f)
+            {
+                clippedSample = 2.0f / 3.0f;
+            }
+            else if (mixedSample <= -1.0f)
+            {
+                clippedSample = -2.0f / 3.0f;
+            }
+            else
+            {
+                clippedSample = mixedSample - ((mixedSample * mixedSample * mixedSample) / 3.0f);
+            }
+
+            channelData[sample] = clippedSample * 1.2f;
         }
 
         ++mWritePosition;
@@ -317,7 +339,7 @@ float RumbleRoomAudioProcessor::applyWarmSaturation (float input, float gritAmou
     // Hotter than the old fixed dry blend, but still compensated for loop stability.
     const auto saturatorMix = juce::jmap (gritAmount, 0.0f, 1.0f, 0.55f, 0.90f);
     const auto blended = (input * (1.0f - saturatorMix)) + (shaped * saturatorMix);
-    const auto levelComp = juce::jmap (gritAmount, 0.0f, 1.0f, 1.0f, 0.92f);
+    const auto levelComp = juce::jmap (gritAmount, 0.0f, 1.0f, 1.0f, 0.85f);
     return blended * levelComp;
 }
 
