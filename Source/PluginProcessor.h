@@ -53,6 +53,9 @@ private:
     std::atomic<float>* mDryWetParam { nullptr };
     std::atomic<float>* mGritParam { nullptr };
     std::atomic<float>* mCutoffParam { nullptr };
+    std::atomic<float>* mSyncParam { nullptr };
+    std::atomic<float>* mSubdivisionParam { nullptr };
+    std::atomic<float>* mBpmParam { nullptr };
 
     juce::dsp::StateVariableTPTFilter<float> mFilter;
     juce::dsp::StateVariableTPTFilter<float> mHPFilter;

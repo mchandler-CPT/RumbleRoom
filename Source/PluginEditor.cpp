@@ -21,6 +21,8 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
     setLookAndFeel (&boutiqueLookAndFeel);
+    audioProcessor.apvts.addParameterListener ("sync", this);
+    audioProcessor.apvts.addParameterListener ("bpm", this);
 
     configureKnob (sizeSlider, sizeLabel, "SIZE");
     configureKnob (dampSlider, dampLabel, "DAMP");
@@ -28,7 +30,34 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     configureKnob (gritSlider, gritLabel, "GRIT");
     configureKnob (mixSlider, mixLabel, "MIX");
 
-    sizeAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "delayTime", sizeSlider);
+    syncLabel.setText ("SYNC", juce::dontSendNotification);
+    syncLabel.setJustificationType (juce::Justification::centredLeft);
+    syncLabel.setFont (juce::Font ("Times New Roman", 14.0f, juce::Font::bold));
+    syncLabel.setColour (juce::Label::textColourId, boutiqueCream);
+    addAndMakeVisible (syncLabel);
+
+    syncToggle.setClickingTogglesState (true);
+    addAndMakeVisible (syncToggle);
+    syncAttachment = std::make_unique<ButtonAttachment> (audioProcessor.apvts, "sync", syncToggle);
+    syncToggle.onClick = [this] { updateSizeControlMode(); };
+
+    bpmLabel.setText ("BPM", juce::dontSendNotification);
+    bpmLabel.setJustificationType (juce::Justification::centredLeft);
+    bpmLabel.setFont (juce::Font ("Times New Roman", 14.0f, juce::Font::bold));
+    bpmLabel.setColour (juce::Label::textColourId, boutiqueCream);
+    addAndMakeVisible (bpmLabel);
+
+    bpmEditor.setInputRestrictions (6, "0123456789.");
+    bpmEditor.setJustification (juce::Justification::centred);
+    bpmEditor.setColour (juce::TextEditor::backgroundColourId, juce::Colour (0x66241815));
+    bpmEditor.setColour (juce::TextEditor::textColourId, boutiqueCream);
+    bpmEditor.setColour (juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
+    bpmEditor.addListener (this);
+    addAndMakeVisible (bpmEditor);
+    refreshBpmTextFromParameter();
+
+    sizeSlider.setScrollWheelEnabled (true);
+    updateSizeControlMode();
     dampAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "cutoff", dampSlider);
     bounceAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "feedback", bounceSlider);
     gritAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "grit", gritSlider);
@@ -39,6 +68,9 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
 
 RumbleRoomAudioProcessorEditor::~RumbleRoomAudioProcessorEditor()
 {
+    audioProcessor.apvts.removeParameterListener ("sync", this);
+    audioProcessor.apvts.removeParameterListener ("bpm", this);
+    bpmEditor.removeListener (this);
     setLookAndFeel (nullptr);
 }
 
@@ -71,7 +103,13 @@ void RumbleRoomAudioProcessorEditor::paint (juce::Graphics& g)
 void RumbleRoomAudioProcessorEditor::resized()
 {
     auto area = getLocalBounds().reduced (20, 14);
-    area.removeFromTop (52);
+    auto topArea = area.removeFromTop (52);
+    auto syncPanel = topArea.removeFromRight (220).reduced (4, 6);
+    syncToggle.setBounds (syncPanel.removeFromLeft (24).withTrimmedTop (2));
+    syncLabel.setBounds (syncPanel.removeFromLeft (58));
+    bpmLabel.setBounds (syncPanel.removeFromLeft (38));
+    bpmEditor.setBounds (syncPanel.removeFromLeft (72).reduced (0, 2));
+
     const auto rowWidth = 700;
     auto centeredRow = area.withSizeKeepingCentre (rowWidth, area.getHeight());
     const auto knobWidth = centeredRow.getWidth() / 5;
@@ -105,6 +143,97 @@ void RumbleRoomAudioProcessorEditor::configureKnob (juce::Slider& slider, juce::
     label.setFont (juce::Font ("Times New Roman", 17.0f, juce::Font::plain));
     label.setColour (juce::Label::textColourId, boutiqueCream);
     addAndMakeVisible (label);
+}
+
+void RumbleRoomAudioProcessorEditor::updateSizeControlMode()
+{
+    const auto syncValue = audioProcessor.apvts.getRawParameterValue ("sync");
+    const auto syncEnabled = (syncValue != nullptr && syncValue->load() > 0.5f);
+
+    if (syncEnabled == sizeUsingSync && (sizeDelayAttachment != nullptr || sizeSubdivisionAttachment != nullptr))
+        return;
+
+    sizeDelayAttachment.reset();
+    sizeSubdivisionAttachment.reset();
+
+    if (syncEnabled)
+    {
+        sizeSlider.setRange (0.0, 10.0, 1.0);
+        sizeSlider.setNumDecimalPlacesToDisplay (0);
+        sizeSlider.setScrollWheelEnabled (true);
+        sizeSlider.textFromValueFunction = [] (double value)
+        {
+            static const juce::StringArray labels { "1/1", "1/2", "1/2T", "1/4", "1/4T",
+                                                    "1/8", "1/8T", "1/16", "1/16T", "1/32", "1/64" };
+            const auto idx = juce::jlimit (0, labels.size() - 1, juce::roundToInt (value));
+            return labels[idx];
+        };
+        sizeSlider.valueFromTextFunction = [] (const juce::String& text)
+        {
+            static const juce::StringArray labels { "1/1", "1/2", "1/2T", "1/4", "1/4T",
+                                                    "1/8", "1/8T", "1/16", "1/16T", "1/32", "1/64" };
+            const auto idx = labels.indexOf (text.trim());
+            return idx >= 0 ? static_cast<double> (idx) : 3.0;
+        };
+        sizeSubdivisionAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "subdivision", sizeSlider);
+    }
+    else
+    {
+        sizeSlider.setRange (1.0, 1000.0, 0.01);
+        sizeSlider.setSkewFactor (0.35);
+        sizeSlider.setNumDecimalPlacesToDisplay (1);
+        sizeSlider.setScrollWheelEnabled (false);
+        sizeSlider.textFromValueFunction = [] (double value) { return juce::String (value, 1) + " ms"; };
+        sizeSlider.valueFromTextFunction = nullptr;
+        sizeDelayAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "delayTime", sizeSlider);
+    }
+
+    sizeUsingSync = syncEnabled;
+}
+
+void RumbleRoomAudioProcessorEditor::parameterChanged (const juce::String& parameterID, float)
+{
+    if (parameterID == "sync" || parameterID == "bpm")
+        triggerAsyncUpdate();
+}
+
+void RumbleRoomAudioProcessorEditor::handleAsyncUpdate()
+{
+    updateSizeControlMode();
+    refreshBpmTextFromParameter();
+}
+
+void RumbleRoomAudioProcessorEditor::textEditorReturnKeyPressed (juce::TextEditor& editor)
+{
+    if (&editor == &bpmEditor)
+        pushBpmTextToParameter();
+}
+
+void RumbleRoomAudioProcessorEditor::textEditorFocusLost (juce::TextEditor& editor)
+{
+    if (&editor == &bpmEditor)
+        pushBpmTextToParameter();
+}
+
+void RumbleRoomAudioProcessorEditor::pushBpmTextToParameter()
+{
+    const auto entered = bpmEditor.getText().getFloatValue();
+    const auto clamped = juce::jlimit (40.0f, 260.0f, entered);
+    if (auto* param = audioProcessor.apvts.getParameter ("bpm"))
+    {
+        const auto normalised = param->convertTo0to1 (clamped);
+        param->beginChangeGesture();
+        param->setValueNotifyingHost (normalised);
+        param->endChangeGesture();
+    }
+    refreshBpmTextFromParameter();
+}
+
+void RumbleRoomAudioProcessorEditor::refreshBpmTextFromParameter()
+{
+    const auto bpmValue = audioProcessor.apvts.getRawParameterValue ("bpm");
+    if (bpmValue != nullptr)
+        bpmEditor.setText (juce::String (bpmValue->load(), 1), juce::dontSendNotification);
 }
 
 void RumbleRoomAudioProcessorEditor::BoutiqueLookAndFeel::drawRotarySlider (juce::Graphics& g,

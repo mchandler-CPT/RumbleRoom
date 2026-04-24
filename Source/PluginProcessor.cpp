@@ -17,6 +17,9 @@ RumbleRoomAudioProcessor::RumbleRoomAudioProcessor()
     mDryWetParam    = apvts.getRawParameterValue ("dryWet");
     mGritParam      = apvts.getRawParameterValue ("grit");
     mCutoffParam    = apvts.getRawParameterValue ("cutoff");
+    mSyncParam      = apvts.getRawParameterValue ("sync");
+    mSubdivisionParam = apvts.getRawParameterValue ("subdivision");
+    mBpmParam       = apvts.getRawParameterValue ("bpm");
 }
 
 const juce::String RumbleRoomAudioProcessor::getName() const
@@ -168,7 +171,28 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     const auto dryWetTarget = juce::jlimit (0.0f, 1.0f, mDryWetParam != nullptr ? mDryWetParam->load() : 0.26f);
     const auto gritTarget = juce::jlimit (0.0f, 1.0f, mGritParam != nullptr ? mGritParam->load() : 0.41f);
     const auto cutoff = juce::jlimit (20.0f, 20000.0f, mCutoffParam != nullptr ? mCutoffParam->load() : 1380.0f);
-    const auto delayTargetMs = juce::jlimit (1.0f, 1000.0f, mDelayTimeParam != nullptr ? mDelayTimeParam->load() : 20.0f);
+    auto delayTargetMs = juce::jlimit (1.0f, 1000.0f, mDelayTimeParam != nullptr ? mDelayTimeParam->load() : 20.0f);
+    const auto syncEnabled = (mSyncParam != nullptr && mSyncParam->load() > 0.5f);
+
+    if (syncEnabled)
+    {
+        constexpr float subdivisionMultipliers[] { 4.0f, 2.0f, 4.0f / 3.0f, 1.0f, 2.0f / 3.0f,
+                                                   0.5f, 1.0f / 3.0f, 0.25f, 1.0f / 6.0f, 0.125f, 0.0625f };
+
+        float bpm = juce::jlimit (40.0f, 260.0f, mBpmParam != nullptr ? mBpmParam->load() : 120.0f);
+        if (auto* playHead = getPlayHead())
+        {
+            if (const auto position = playHead->getPosition())
+            {
+                if (const auto hostBpm = position->getBpm(); hostBpm.hasValue())
+                    bpm = static_cast<float> (*hostBpm);
+            }
+        }
+
+        const auto subdivisionIndex = juce::jlimit (0, 10, juce::roundToInt (mSubdivisionParam != nullptr ? mSubdivisionParam->load() : 3.0f));
+        delayTargetMs = (60000.0f / juce::jmax (1.0f, bpm)) * subdivisionMultipliers[subdivisionIndex];
+        delayTargetMs = juce::jlimit (1.0f, 1000.0f, delayTargetMs);
+    }
 
     mSmoothedDelayTimeMs.setTargetValue (delayTargetMs);
     mSmoothedFeedback.setTargetValue (feedbackTarget);
@@ -323,6 +347,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout RumbleRoomAudioProcessor::cr
                                                                     juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.41f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("cutoff", "Cutoff",
                                                                     juce::NormalisableRange<float> (20.0f, 20000.0f, 1.0f, 0.35f), 1380.0f));
+    params.push_back (std::make_unique<juce::AudioParameterBool> ("sync", "Sync", false));
+    params.push_back (std::make_unique<juce::AudioParameterChoice> ("subdivision", "Subdivision",
+                                                                     juce::StringArray { "1/1", "1/2", "1/2T", "1/4", "1/4T",
+                                                                                         "1/8", "1/8T", "1/16", "1/16T", "1/32", "1/64" },
+                                                                     3));
+    params.push_back (std::make_unique<juce::AudioParameterFloat> ("bpm", "BPM",
+                                                                    juce::NormalisableRange<float> (40.0f, 260.0f, 0.1f), 120.0f));
     return { params.begin(), params.end() };
 }
 

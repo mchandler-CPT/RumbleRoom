@@ -3,7 +3,10 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 
-class RumbleRoomAudioProcessorEditor : public juce::AudioProcessorEditor
+class RumbleRoomAudioProcessorEditor : public juce::AudioProcessorEditor,
+                                       private juce::AudioProcessorValueTreeState::Listener,
+                                       private juce::AsyncUpdater,
+                                       private juce::TextEditor::Listener
 {
 public:
     explicit RumbleRoomAudioProcessorEditor (RumbleRoomAudioProcessor&);
@@ -30,6 +33,13 @@ private:
     };
 
     void configureKnob (juce::Slider& slider, juce::Label& label, const juce::String& text);
+    void updateSizeControlMode();
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
+    void handleAsyncUpdate() override;
+    void textEditorReturnKeyPressed (juce::TextEditor& editor) override;
+    void textEditorFocusLost (juce::TextEditor& editor) override;
+    void pushBpmTextToParameter();
+    void refreshBpmTextFromParameter();
 
     RumbleRoomAudioProcessor& audioProcessor;
     BoutiqueLookAndFeel boutiqueLookAndFeel;
@@ -45,13 +55,22 @@ private:
     juce::Label bounceLabel;
     juce::Label gritLabel;
     juce::Label mixLabel;
+    juce::ToggleButton syncToggle;
+    juce::Label syncLabel;
+    juce::Label bpmLabel;
+    juce::TextEditor bpmEditor;
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
-    std::unique_ptr<SliderAttachment> sizeAttachment;
+    using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
+    std::unique_ptr<SliderAttachment> sizeDelayAttachment;
+    std::unique_ptr<SliderAttachment> sizeSubdivisionAttachment;
     std::unique_ptr<SliderAttachment> dampAttachment;
     std::unique_ptr<SliderAttachment> bounceAttachment;
     std::unique_ptr<SliderAttachment> gritAttachment;
     std::unique_ptr<SliderAttachment> mixAttachment;
+    std::unique_ptr<ButtonAttachment> syncAttachment;
+
+    bool sizeUsingSync { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RumbleRoomAudioProcessorEditor)
 };
