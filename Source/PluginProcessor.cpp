@@ -113,6 +113,7 @@ void RumbleRoomAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     mSmoothedCutoff.reset (sampleRate, 0.04);
     mSmoothedCutoff.setCurrentAndTargetValue (initialCutoff);
     mFilter.setCutoffFrequency (initialCutoff);
+    mEnvelopeLevel = 0.0f;
 }
 
 void RumbleRoomAudioProcessor::releaseResources()
@@ -170,15 +171,29 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     mSmoothedGrit.setTargetValue (gritTarget);
     mSmoothedCutoff.setTargetValue (cutoff);
     float blockPeak = 0.0f;
+    const auto attackCoeff = std::exp (-1.0f / (0.005f * sampleRate));
+    const auto releaseCoeff = std::exp (-1.0f / (0.100f * sampleRate));
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
         const auto smoothedCutoff = mSmoothedCutoff.getNextValue();
-        mFilter.setCutoffFrequency (smoothedCutoff);
 
         const auto feedback = mSmoothedFeedback.getNextValue();
         const auto dryWet = mSmoothedDryWet.getNextValue();
         const auto grit = mSmoothedGrit.getNextValue();
+        float absInput = 0.0f;
+        for (int inCh = 0; inCh < totalInputChannels; ++inCh)
+            absInput = juce::jmax (absInput, std::abs (buffer.getSample (inCh, sample)));
+
+        if (absInput > mEnvelopeLevel)
+            mEnvelopeLevel = attackCoeff * mEnvelopeLevel + (1.0f - attackCoeff) * absInput;
+        else
+            mEnvelopeLevel = releaseCoeff * mEnvelopeLevel + (1.0f - releaseCoeff) * absInput;
+
+        const auto envModulation = mEnvelopeLevel * 4000.0f * dryWet;
+        const auto modulatedCutoff = juce::jlimit (20.0f, 20000.0f, smoothedCutoff + envModulation);
+        mFilter.setCutoffFrequency (modulatedCutoff);
+
         const auto gritCurve = grit * grit;
         const auto autoDampedFeedback = feedback * (1.0f - (gritCurve * 0.15f));
         const auto dryGain = 1.0f - dryWet;
