@@ -114,6 +114,7 @@ void RumbleRoomAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     mSmoothedCutoff.setCurrentAndTargetValue (initialCutoff);
     mFilter.setCutoffFrequency (initialCutoff);
     mEnvelopeLevel = 0.0f;
+    mJitterAmount = 0.0f;
 }
 
 void RumbleRoomAudioProcessor::releaseResources()
@@ -203,6 +204,10 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         const auto delaySamples = delayTimeSeconds * sampleRate;
         const auto decorrelationAmount = juce::jmap (delayTimeMs, 1.0f, 1000.0f, 0.0f, 0.015f);
 
+        mJitterAmount += (mRandom.nextFloat() * 2.0f - 1.0f) * 0.001f;
+        mJitterAmount *= 0.999f;
+        const auto jitterSamples = mJitterAmount * grit * 5.0f;
+
         for (int channel = 0; channel < totalOutputChannels; ++channel)
         {
             auto* channelData = buffer.getWritePointer (channel);
@@ -218,9 +223,15 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             while (readPosition >= static_cast<float> (delayBufferLength))
                 readPosition -= static_cast<float> (delayBufferLength);
 
-            const auto readIndexA = static_cast<int> (readPosition);
+            float jitteredReadPos = readPosition + jitterSamples;
+            while (jitteredReadPos < 0.0f)
+                jitteredReadPos += static_cast<float> (delayBufferLength);
+            while (jitteredReadPos >= static_cast<float> (delayBufferLength))
+                jitteredReadPos -= static_cast<float> (delayBufferLength);
+
+            const auto readIndexA = static_cast<int> (jitteredReadPos);
             const auto readIndexB = (readIndexA + 1) % delayBufferLength;
-            const auto frac = readPosition - static_cast<float> (readIndexA);
+            const auto frac = jitteredReadPos - static_cast<float> (readIndexA);
 
             const auto inputSample = channelData[sample];
             blockPeak = juce::jmax (blockPeak, std::abs (inputSample));

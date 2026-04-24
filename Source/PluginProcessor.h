@@ -62,6 +62,8 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mSmoothedCutoff;
     std::atomic<float> mInputMeterLevel { 0.0f };
     float mEnvelopeLevel { 0.0f };
+    float mJitterAmount { 0.0f };
+    juce::Random mRandom;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RumbleRoomAudioProcessor)
 };
