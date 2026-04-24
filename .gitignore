@@ -1,0 +1,11 @@
+build/
+.vscode/
+bin/
+obj/
+*.pdb
+*.ilk
+*.lib
+*.exp
+*.obj
+*.exe
+*.vst3
