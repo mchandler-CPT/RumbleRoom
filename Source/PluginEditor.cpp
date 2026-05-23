@@ -28,6 +28,7 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     configureKnob (dampSlider, dampLabel, "DAMP");
     configureKnob (bounceSlider, bounceLabel, "BOUNCE");
     configureKnob (gritSlider, gritLabel, "GRIT");
+    configureKnob (releaseSlider, releaseLabel, "RELEASE");
     configureKnob (mixSlider, mixLabel, "MIX");
 
     syncLabel.setText ("SYNC", juce::dontSendNotification);
@@ -61,6 +62,7 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     dampAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "cutoff", dampSlider);
     bounceAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "feedback", bounceSlider);
     gritAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "grit", gritSlider);
+    releaseAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "release", releaseSlider);
     mixAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "dryWet", mixSlider);
 
     setSize (780, 240);
@@ -110,9 +112,9 @@ void RumbleRoomAudioProcessorEditor::resized()
     bpmLabel.setBounds (syncPanel.removeFromLeft (38));
     bpmEditor.setBounds (syncPanel.removeFromLeft (72).reduced (0, 2));
 
-    const auto rowWidth = 700;
+    const auto rowWidth = 740;
     auto centeredRow = area.withSizeKeepingCentre (rowWidth, area.getHeight());
-    const auto knobWidth = centeredRow.getWidth() / 5;
+    const auto knobWidth = centeredRow.getWidth() / 6;
 
     auto placeKnob = [knobWidth] (juce::Rectangle<int> slot, juce::Slider& slider, juce::Label& label)
     {
@@ -126,6 +128,7 @@ void RumbleRoomAudioProcessorEditor::resized()
     placeKnob (centeredRow.removeFromLeft (knobWidth), dampSlider, dampLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), bounceSlider, bounceLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), gritSlider, gritLabel);
+    placeKnob (centeredRow.removeFromLeft (knobWidth), releaseSlider, releaseLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), mixSlider, mixLabel);
 }
 

@@ -53,6 +53,7 @@ private:
     std::atomic<float>* mDryWetParam { nullptr };
     std::atomic<float>* mGritParam { nullptr };
     std::atomic<float>* mCutoffParam { nullptr };
+    std::atomic<float>* mReleaseParam { nullptr };
     std::atomic<float>* mSyncParam { nullptr };
     std::atomic<float>* mSubdivisionParam { nullptr };
     std::atomic<float>* mBpmParam { nullptr };
@@ -63,6 +64,7 @@ private:
     juce::LinearSmoothedValue<float> mSmoothedFeedback;
     juce::LinearSmoothedValue<float> mSmoothedDryWet;
     juce::LinearSmoothedValue<float> mSmoothedGrit;
+    juce::LinearSmoothedValue<float> mSmoothedRelease;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mSmoothedCutoff;
     std::atomic<float> mInputMeterLevel { 0.0f };
     float mEnvelopeLevel { 0.0f };

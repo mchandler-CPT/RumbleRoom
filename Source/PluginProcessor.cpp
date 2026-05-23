@@ -17,6 +17,7 @@ RumbleRoomAudioProcessor::RumbleRoomAudioProcessor()
     mDryWetParam    = apvts.getRawParameterValue ("dryWet");
     mGritParam      = apvts.getRawParameterValue ("grit");
     mCutoffParam    = apvts.getRawParameterValue ("cutoff");
+    mReleaseParam   = apvts.getRawParameterValue ("release");
     mSyncParam      = apvts.getRawParameterValue ("sync");
     mSubdivisionParam = apvts.getRawParameterValue ("subdivision");
     mBpmParam       = apvts.getRawParameterValue ("bpm");
@@ -109,6 +110,7 @@ void RumbleRoomAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     const auto initialFeedback = juce::jlimit (0.0f, 0.99f, mFeedbackParam != nullptr ? mFeedbackParam->load() : 0.25f);
     const auto initialDryWet = juce::jlimit (0.0f, 1.0f, mDryWetParam != nullptr ? mDryWetParam->load() : 0.26f);
     const auto initialGrit = juce::jlimit (0.0f, 1.0f, mGritParam != nullptr ? mGritParam->load() : 0.41f);
+    const auto initialRelease = juce::jlimit (0.1f, 2.0f, mReleaseParam != nullptr ? mReleaseParam->load() : 0.5f);
     mSmoothedDelayTimeMs.reset (sampleRate, 0.04);
     mSmoothedDelayTimeMs.setCurrentAndTargetValue (initialDelayMs);
     mSmoothedFeedback.reset (sampleRate, 0.04);
@@ -117,6 +119,8 @@ void RumbleRoomAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     mSmoothedDryWet.setCurrentAndTargetValue (initialDryWet);
     mSmoothedGrit.reset (sampleRate, 0.04);
     mSmoothedGrit.setCurrentAndTargetValue (initialGrit);
+    mSmoothedRelease.reset (sampleRate, 0.04);
+    mSmoothedRelease.setCurrentAndTargetValue (initialRelease);
     mSmoothedCutoff.reset (sampleRate, 0.04);
     mSmoothedCutoff.setCurrentAndTargetValue (initialCutoff);
     mFilter.setCutoffFrequency (initialCutoff);
@@ -170,6 +174,7 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     const auto feedbackTarget = juce::jlimit (0.0f, 0.99f, mFeedbackParam != nullptr ? mFeedbackParam->load() : 0.25f);
     const auto dryWetTarget = juce::jlimit (0.0f, 1.0f, mDryWetParam != nullptr ? mDryWetParam->load() : 0.26f);
     const auto gritTarget = juce::jlimit (0.0f, 1.0f, mGritParam != nullptr ? mGritParam->load() : 0.41f);
+    const auto releaseTarget = juce::jlimit (0.1f, 2.0f, mReleaseParam != nullptr ? mReleaseParam->load() : 0.5f);
     const auto cutoff = juce::jlimit (20.0f, 20000.0f, mCutoffParam != nullptr ? mCutoffParam->load() : 1380.0f);
     auto delayTargetMs = juce::jlimit (1.0f, 1000.0f, mDelayTimeParam != nullptr ? mDelayTimeParam->load() : 20.0f);
     const auto syncEnabled = (mSyncParam != nullptr && mSyncParam->load() > 0.5f);
@@ -198,10 +203,11 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     mSmoothedFeedback.setTargetValue (feedbackTarget);
     mSmoothedDryWet.setTargetValue (dryWetTarget);
     mSmoothedGrit.setTargetValue (gritTarget);
+    mSmoothedRelease.setTargetValue (releaseTarget);
     mSmoothedCutoff.setTargetValue (cutoff);
     float blockPeak = 0.0f;
     const auto attackCoeff = std::exp (-1.0f / (0.005f * sampleRate));
-    const auto releaseCoeff = std::exp (-1.0f / (0.100f * sampleRate));
+    constexpr auto boutiqueEnvDepth = 0.7f;
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
@@ -210,6 +216,8 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         const auto feedback = mSmoothedFeedback.getNextValue();
         const auto dryWet = mSmoothedDryWet.getNextValue();
         const auto grit = mSmoothedGrit.getNextValue();
+        const auto releaseSeconds = mSmoothedRelease.getNextValue();
+        const auto releaseCoeff = std::exp (-1.0f / (releaseSeconds * sampleRate));
         const auto gritTiltOffset = juce::jmap (grit, 0.0f, 1.0f, 1.0f, 0.7f);
         float absInput = 0.0f;
         for (int inCh = 0; inCh < totalInputChannels; ++inCh)
@@ -220,12 +228,14 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         else
             mEnvelopeLevel = releaseCoeff * mEnvelopeLevel + (1.0f - releaseCoeff) * absInput;
 
-        const auto envModulation = mEnvelopeLevel * 4000.0f * dryWet;
+        const auto envModulation = mEnvelopeLevel * 8000.0f * boutiqueEnvDepth;
         const auto modulatedCutoff = juce::jlimit (20.0f, 20000.0f, (smoothedCutoff * gritTiltOffset) + envModulation);
         mFilter.setCutoffFrequency (modulatedCutoff);
 
         const auto gritCurve = grit * grit;
-        const auto autoDampedFeedback = feedback * (1.0f - (gritCurve * 0.4f));
+        const auto releaseSustainBoost = juce::jmap (releaseSeconds, 0.1f, 2.0f, 0.0f, 0.2f);
+        const auto rawFeedback = feedback + releaseSustainBoost;
+        const auto autoDampedFeedback = juce::jlimit (0.0f, 0.99f, rawFeedback * (1.0f - (gritCurve * 0.3f)));
         const auto dryGain = 1.0f - dryWet;
         const auto wetGain = dryWet;
         const auto delayTimeMs = mSmoothedDelayTimeMs.getNextValue();
@@ -271,7 +281,7 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             const auto grittySample = applyWarmSaturation (delayedSample, grit);
             const auto filteredSample = mFilter.processSample (channel % delayChannels, grittySample);
             const auto hpFilteredSample = mHPFilter.processSample (channel % delayChannels, filteredSample);
-            const auto feedbackPath = std::tanh (hpFilteredSample * autoDampedFeedback) * 0.93f;
+            const auto feedbackPath = std::tanh (hpFilteredSample * autoDampedFeedback) * 0.98f;
 
             delayData[mWritePosition] = inputSample + feedbackPath;
             auto mixedSample = (inputSample * dryGain) + (filteredSample * wetGain);
@@ -345,6 +355,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout RumbleRoomAudioProcessor::cr
                                                                     juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.26f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("grit", "Grit",
                                                                     juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.41f));
+    params.push_back (std::make_unique<juce::AudioParameterFloat> ("release", "Release",
+                                                                    juce::NormalisableRange<float> (0.1f, 2.0f, 0.001f), 0.5f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("cutoff", "Cutoff",
                                                                     juce::NormalisableRange<float> (20.0f, 20000.0f, 1.0f, 0.35f), 1380.0f));
     params.push_back (std::make_unique<juce::AudioParameterBool> ("sync", "Sync", false));
