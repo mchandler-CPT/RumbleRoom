@@ -9,3 +9,5 @@ obj/
 *.obj
 *.exe
 *.vst3
+.gitmodules
+Juce/

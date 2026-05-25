@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
+#include "UI/BoutiqueLookAndFeel.h"
 
 class RumbleRoomAudioProcessorEditor : public juce::AudioProcessorEditor,
                                        private juce::AudioProcessorValueTreeState::Listener,
@@ -16,22 +17,6 @@ public:
     void resized() override;
 
 private:
-    class BoutiqueLookAndFeel : public juce::LookAndFeel_V4
-    {
-    public:
-        BoutiqueLookAndFeel();
-
-        void drawRotarySlider (juce::Graphics& g,
-                               int x,
-                               int y,
-                               int width,
-                               int height,
-                               float sliderPosProportional,
-                               float rotaryStartAngle,
-                               float rotaryEndAngle,
-                               juce::Slider& slider) override;
-    };
-
     void configureKnob (juce::Slider& slider, juce::Label& label, const juce::String& text);
     void updateSizeControlMode();
     void parameterChanged (const juce::String& parameterID, float newValue) override;
@@ -46,6 +31,7 @@ private:
 
     juce::Slider sizeSlider;
     juce::Slider dampSlider;
+    juce::Slider brightSlider;
     juce::Slider bounceSlider;
     juce::Slider gritSlider;
     juce::Slider releaseSlider;
@@ -53,6 +39,7 @@ private:
 
     juce::Label sizeLabel;
     juce::Label dampLabel;
+    juce::Label brightLabel;
     juce::Label bounceLabel;
     juce::Label gritLabel;
     juce::Label releaseLabel;
@@ -67,6 +54,7 @@ private:
     std::unique_ptr<SliderAttachment> sizeDelayAttachment;
     std::unique_ptr<SliderAttachment> sizeSubdivisionAttachment;
     std::unique_ptr<SliderAttachment> dampAttachment;
+    std::unique_ptr<SliderAttachment> brightAttachment;
     std::unique_ptr<SliderAttachment> bounceAttachment;
     std::unique_ptr<SliderAttachment> gritAttachment;
     std::unique_ptr<SliderAttachment> releaseAttachment;
