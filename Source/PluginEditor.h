@@ -34,6 +34,7 @@ private:
     juce::Slider brightSlider;
     juce::Slider bounceSlider;
     juce::Slider gritSlider;
+    juce::Slider mWidthSlider;
     juce::Slider releaseSlider;
     juce::Slider mixSlider;
 
@@ -42,6 +43,7 @@ private:
     juce::Label brightLabel;
     juce::Label bounceLabel;
     juce::Label gritLabel;
+    juce::Label mWidthLabel;
     juce::Label releaseLabel;
     juce::Label mixLabel;
     juce::ToggleButton syncToggle;
@@ -57,6 +59,7 @@ private:
     std::unique_ptr<SliderAttachment> brightAttachment;
     std::unique_ptr<SliderAttachment> bounceAttachment;
     std::unique_ptr<SliderAttachment> gritAttachment;
+    std::unique_ptr<SliderAttachment> mWidthAttachment;
     std::unique_ptr<SliderAttachment> releaseAttachment;
     std::unique_ptr<SliderAttachment> mixAttachment;
     std::unique_ptr<ButtonAttachment> syncAttachment;

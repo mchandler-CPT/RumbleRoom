@@ -12,6 +12,7 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     configureKnob (brightSlider, brightLabel, "BRIGHT");
     configureKnob (bounceSlider, bounceLabel, "BOUNCE");
     configureKnob (gritSlider, gritLabel, "GRIT");
+    configureKnob (mWidthSlider, mWidthLabel, "WIDTH");
     configureKnob (releaseSlider, releaseLabel, "RELEASE");
     configureKnob (mixSlider, mixLabel, "MIX");
 
@@ -47,10 +48,11 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     brightAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "hpCutoff", brightSlider);
     bounceAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "feedback", bounceSlider);
     gritAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "grit", gritSlider);
+    mWidthAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "width", mWidthSlider);
     releaseAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "release", releaseSlider);
     mixAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "dryWet", mixSlider);
 
-    setSize (900, 240);
+    setSize (1020, 240);
 }
 
 RumbleRoomAudioProcessorEditor::~RumbleRoomAudioProcessorEditor()
@@ -97,9 +99,9 @@ void RumbleRoomAudioProcessorEditor::resized()
     bpmLabel.setBounds (syncPanel.removeFromLeft (38));
     bpmEditor.setBounds (syncPanel.removeFromLeft (72).reduced (0, 2));
 
-    const auto rowWidth = 860;
+    const auto rowWidth = 980;
     auto centeredRow = area.withSizeKeepingCentre (rowWidth, area.getHeight());
-    const auto knobWidth = centeredRow.getWidth() / 7;
+    const auto knobWidth = centeredRow.getWidth() / 8;
 
     auto placeKnob = [knobWidth] (juce::Rectangle<int> slot, juce::Slider& slider, juce::Label& label)
     {
@@ -114,6 +116,7 @@ void RumbleRoomAudioProcessorEditor::resized()
     placeKnob (centeredRow.removeFromLeft (knobWidth), brightSlider, brightLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), bounceSlider, bounceLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), gritSlider, gritLabel);
+    placeKnob (centeredRow.removeFromLeft (knobWidth), mWidthSlider, mWidthLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), releaseSlider, releaseLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), mixSlider, mixLabel);
 }
