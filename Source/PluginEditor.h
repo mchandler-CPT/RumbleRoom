@@ -38,6 +38,7 @@ private:
     juce::Slider releaseSlider;
     juce::Slider mixSlider;
     juce::Slider wowSlider;
+    juce::Slider diffuseSlider;
 
     juce::Label sizeLabel;
     juce::Label dampLabel;
@@ -48,10 +49,9 @@ private:
     juce::Label releaseLabel;
     juce::Label mixLabel;
     juce::Label wowLabel;
-    juce::ToggleButton syncToggle;
-    juce::ToggleButton diffuseToggle;
-    juce::Label syncLabel;
     juce::Label diffuseLabel;
+    juce::ToggleButton syncToggle;
+    juce::Label syncLabel;
     juce::Label bpmLabel;
     juce::TextEditor bpmEditor;
 
@@ -67,8 +67,8 @@ private:
     std::unique_ptr<SliderAttachment> releaseAttachment;
     std::unique_ptr<SliderAttachment> mixAttachment;
     std::unique_ptr<SliderAttachment> wowAttachment;
+    std::unique_ptr<SliderAttachment> diffuseAttachment;
     std::unique_ptr<ButtonAttachment> syncAttachment;
-    std::unique_ptr<ButtonAttachment> diffuseAttachment;
 
     bool sizeUsingSync { false };
 

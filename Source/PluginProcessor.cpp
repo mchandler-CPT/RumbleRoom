@@ -132,18 +132,22 @@ void RumbleRoomAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     mSmoothedCutoff.setCurrentAndTargetValue (initialCutoff);
     mSmoothedHpCutoff.reset (sampleRate, 0.04);
     mSmoothedHpCutoff.setCurrentAndTargetValue (initialHpCutoff);
+    const auto initialDiffusion = juce::jlimit (0.0f, 1.0f, mDiffusionParam != nullptr ? mDiffusionParam->load() : 0.0f);
+    mSmoothedDiffusion.reset (sampleRate, 0.05);
+    mSmoothedDiffusion.setCurrentAndTargetValue (initialDiffusion);
     mFilter.setCutoffFrequency (initialCutoff);
     mHPFilter.setCutoffFrequency (initialHpCutoff);
     mEnvelopeLevel = 0.0f;
     mJitterAmount = 0.0f;
     mModPhase = 0.0f;
 
+    const int diffLengths[kNumDiffStages] = { 557, 893, 1123, 1399 };
+    const float diffSpeeds[kNumDiffStages] = { 0.35f, 0.57f, 0.79f, 1.11f };
+
     for (int i = 0; i < kNumDiffStages; ++i)
     {
-        mDiffBuffersL[i].assign (static_cast<size_t> (mDiffLengths[i]), 0.0f);
-        mDiffBuffersR[i].assign (static_cast<size_t> (mDiffLengths[i]), 0.0f);
-        mDiffWritePositionsL[i] = 0;
-        mDiffWritePositionsR[i] = 0;
+        mFiltersL[i].init (diffLengths[i], diffSpeeds[i]);
+        mFiltersR[i].init (diffLengths[i], diffSpeeds[i]);
     }
 }
 
@@ -227,6 +231,7 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     mSmoothedRelease.setTargetValue (releaseTarget);
     mSmoothedCutoff.setTargetValue (cutoff);
     mSmoothedHpCutoff.setTargetValue (hpCutoff);
+    mSmoothedDiffusion.setTargetValue (juce::jlimit (0.0f, 1.0f, mDiffusionParam != nullptr ? mDiffusionParam->load() : 0.0f));
     float blockPeak = 0.0f;
     const auto attackCoeff = std::exp (-1.0f / (0.005f * sampleRate));
     constexpr auto boutiqueEnvDepth = 0.7f;
@@ -241,8 +246,6 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         mModPhase += 1.2f / sampleRate;
         if (mModPhase >= 1.0f)
             mModPhase -= 1.0f;
-
-        const auto diffuseActive = mDiffusionParam != nullptr ? mDiffusionParam->load() > 0.5f : false;
 
         const auto smoothedCutoff = mSmoothedCutoff.getNextValue();
         const auto smoothedHpCutoff = mSmoothedHpCutoff.getNextValue();
@@ -265,6 +268,7 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         mJitterAmount *= 0.999f;
         const auto jitterSamples = mJitterAmount * grit * 2.5f;
         const auto widthBlend = mSmoothedWidth.getNextValue();
+        const auto currentDiffusion = mSmoothedDiffusion.getNextValue();
         const auto useStereoWidthMatrix = (totalOutputChannels == 2 && delayChannels >= 2);
         constexpr auto widthTimeSpread = 0.2f;
         const auto channelDelaySamplesL = delaySamples * (1.0f - (widthBlend * widthTimeSpread));
@@ -317,7 +321,18 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
             const auto grittySample = applyWarmSaturation (delayedSample, grit);
             const auto filteredSample = mFilter.processSample (channel % delayChannels, grittySample);
-            const auto hpFilteredSample = mHPFilter.processSample (channel % delayChannels, filteredSample);
+            auto hpFilteredSample = mHPFilter.processSample (channel % delayChannels, filteredSample);
+
+            if (currentDiffusion > 0.001f)
+            {
+                const auto kG = currentDiffusion * 0.62f;
+                auto* filterArray = (channel == 0) ? mFiltersL : mFiltersR;
+
+                hpFilteredSample = filterArray[0].process (hpFilteredSample, kG, sampleRate);
+                hpFilteredSample = filterArray[1].process (hpFilteredSample, kG, sampleRate);
+                hpFilteredSample = filterArray[2].process (hpFilteredSample, kG, sampleRate);
+                hpFilteredSample = filterArray[3].process (hpFilteredSample, kG, sampleRate);
+            }
 
             channelInput[channelIndex] = inputSample;
             channelFiltered[channelIndex] = filteredSample;
@@ -352,30 +367,7 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             const auto inputSample = channelInput[channelIndex];
             const auto filteredSample = channelFiltered[channelIndex];
             const auto hpFilteredSample = channelHpFiltered[channelIndex];
-            auto processedFb = std::tanh (hpFilteredSample * autoDampedFeedback) * 0.98f;
-
-            if (diffuseActive)
-            {
-                constexpr float kG = 0.65f;
-
-                for (int stage = 0; stage < kNumDiffStages; ++stage)
-                {
-                    const auto maxLen = mDiffLengths[stage];
-
-                    auto& diffBuf = (channel == 0) ? mDiffBuffersL[stage] : mDiffBuffersR[stage];
-                    auto& writePos = (channel == 0) ? mDiffWritePositionsL[stage] : mDiffWritePositionsR[stage];
-
-                    const auto bufSample = diffBuf[static_cast<size_t> (writePos)];
-                    const auto x = processedFb;
-                    const auto y = (-kG * x) + bufSample;
-
-                    diffBuf[static_cast<size_t> (writePos)] = x + (kG * y);
-                    processedFb = y;
-
-                    if (++writePos >= maxLen)
-                        writePos = 0;
-                }
-            }
+            const auto processedFb = std::tanh (hpFilteredSample * autoDampedFeedback) * 0.98f;
 
             if (useStereoWidthMatrix)
             {
@@ -482,7 +474,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout RumbleRoomAudioProcessor::cr
                                                                     juce::NormalisableRange<float> (40.0f, 260.0f, 0.1f), 120.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("wowDepth", "Wow & Flutter",
                                                                     juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.15f));
-    params.push_back (std::make_unique<juce::AudioParameterBool> ("diffusion", "Diffuse Space", false));
+    params.push_back (std::make_unique<juce::AudioParameterFloat> ("diffusion", "Diffusion",
+                                                                    juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
     return { params.begin(), params.end() };
 }
 

@@ -68,16 +68,61 @@ private:
     // Tape pitch modulation (Wow & Flutter) variables
     float mModPhase { 0.0f };
 
+    struct ModulatedAllpass
+    {
+        std::vector<float> buffer;
+        int writePos = 0;
+        int length = 0;
+        float lfoPhase = 0.0f;
+        float lfoSpeed = 0.0f;
+
+        void init (int size, float speed)
+        {
+            length = size;
+            buffer.assign (static_cast<size_t> (length), 0.0f);
+            writePos = 0;
+            lfoPhase = 0.0f;
+            lfoSpeed = speed;
+        }
+
+        float process (float input, float kG, float sampleRate)
+        {
+            if (length <= 0)
+                return input;
+
+            lfoPhase += lfoSpeed / sampleRate;
+            if (lfoPhase >= 1.0f)
+                lfoPhase -= 1.0f;
+
+            const auto lfoMod = std::sin (lfoPhase * juce::MathConstants<float>::twoPi) * 8.0f;
+            auto readPos = static_cast<float> (writePos) - (static_cast<float> (length) * 0.5f) + lfoMod;
+
+            while (readPos < 0.0f)
+                readPos += static_cast<float> (length);
+            while (readPos >= static_cast<float> (length))
+                readPos -= static_cast<float> (length);
+
+            const auto idxA = static_cast<int> (readPos);
+            const auto idxB = (idxA + 1) % length;
+            const auto frac = readPos - static_cast<float> (idxA);
+
+            const auto bufSample = buffer[static_cast<size_t> (idxA)]
+                                 + frac * (buffer[static_cast<size_t> (idxB)] - buffer[static_cast<size_t> (idxA)]);
+
+            const auto x = input;
+            const auto y = (-kG * x) + bufSample;
+            buffer[static_cast<size_t> (writePos)] = x + (kG * y);
+
+            if (++writePos >= length)
+                writePos = 0;
+
+            return y;
+        }
+    };
+
     static constexpr int kNumDiffStages = 4;
-    // Scale up the allpass stage sizes significantly for deep, lush room reflections
-    const int mDiffLengths[kNumDiffStages] = { 641, 997, 1237, 1511 };
-
-    std::vector<float> mDiffBuffersL[kNumDiffStages];
-    std::vector<float> mDiffBuffersR[kNumDiffStages];
-
-    // Explicitly separate Left and Right write indices to prevent stereo cross-contamination
-    int mDiffWritePositionsL[kNumDiffStages] = { 0, 0, 0, 0 };
-    int mDiffWritePositionsR[kNumDiffStages] = { 0, 0, 0, 0 };
+    ModulatedAllpass mFiltersL[kNumDiffStages];
+    ModulatedAllpass mFiltersR[kNumDiffStages];
 
     juce::dsp::StateVariableTPTFilter<float> mFilter;
     juce::dsp::StateVariableTPTFilter<float> mHPFilter;
@@ -87,6 +132,7 @@ private:
     juce::LinearSmoothedValue<float> mSmoothedGrit;
     juce::LinearSmoothedValue<float> mSmoothedWidth;
     juce::LinearSmoothedValue<float> mSmoothedRelease;
+    juce::LinearSmoothedValue<float> mSmoothedDiffusion;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mSmoothedCutoff;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mSmoothedHpCutoff;
     std::atomic<float> mInputMeterLevel { 0.0f };
