@@ -42,6 +42,7 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     float applyWarmSaturation (float input, float gritAmount) const noexcept;
+    static float applySoftSafetyLimit (float sample) noexcept;
 
     // Delay "sushi belt" state.
     juce::AudioBuffer<float> mDelayBuffer;
