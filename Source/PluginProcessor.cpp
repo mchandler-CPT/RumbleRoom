@@ -23,6 +23,8 @@ RumbleRoomAudioProcessor::RumbleRoomAudioProcessor()
     mSyncParam      = apvts.getRawParameterValue ("sync");
     mSubdivisionParam = apvts.getRawParameterValue ("subdivision");
     mBpmParam       = apvts.getRawParameterValue ("bpm");
+    mWowDepthParam  = apvts.getRawParameterValue ("wowDepth");
+    mDiffusionParam = apvts.getRawParameterValue ("diffusion");
 }
 
 const juce::String RumbleRoomAudioProcessor::getName() const
@@ -134,6 +136,15 @@ void RumbleRoomAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     mHPFilter.setCutoffFrequency (initialHpCutoff);
     mEnvelopeLevel = 0.0f;
     mJitterAmount = 0.0f;
+    mModPhase = 0.0f;
+
+    for (int i = 0; i < kNumDiffStages; ++i)
+    {
+        mDiffBuffersL[i].assign (static_cast<size_t> (mDiffLengths[i]), 0.0f);
+        mDiffBuffersR[i].assign (static_cast<size_t> (mDiffLengths[i]), 0.0f);
+        mDiffWritePositionsL[i] = 0;
+        mDiffWritePositionsR[i] = 0;
+    }
 }
 
 void RumbleRoomAudioProcessor::releaseResources()
@@ -227,6 +238,12 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
+        mModPhase += 1.2f / sampleRate;
+        if (mModPhase >= 1.0f)
+            mModPhase -= 1.0f;
+
+        const auto diffuseActive = mDiffusionParam != nullptr ? mDiffusionParam->load() > 0.5f : false;
+
         const auto smoothedCutoff = mSmoothedCutoff.getNextValue();
         const auto smoothedHpCutoff = mSmoothedHpCutoff.getNextValue();
 
@@ -270,13 +287,19 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             else if (channel % 2 == 1)
                 channelDelaySamples = delaySamples * (1.0f + decorrelationAmount);
 
+            const auto wowDepth = mWowDepthParam != nullptr ? mWowDepthParam->load() : 0.15f;
+            const auto maxSafeSwing = channelDelaySamples * 0.80f;
+            const auto targetSwing = wowDepth * 150.0f;
+            const auto safeSwing = juce::jmin (targetSwing, maxSafeSwing);
+            const auto lfoOffsetSamples = std::sin (mModPhase * juce::MathConstants<float>::twoPi) * safeSwing;
+
             float readPosition = static_cast<float> (mWritePosition) - channelDelaySamples;
             while (readPosition < 0.0f)
                 readPosition += static_cast<float> (delayBufferLength);
             while (readPosition >= static_cast<float> (delayBufferLength))
                 readPosition -= static_cast<float> (delayBufferLength);
 
-            float jitteredReadPos = readPosition + jitterSamples;
+            float jitteredReadPos = readPosition + jitterSamples + lfoOffsetSamples;
             while (jitteredReadPos < 0.0f)
                 jitteredReadPos += static_cast<float> (delayBufferLength);
             while (jitteredReadPos >= static_cast<float> (delayBufferLength))
@@ -329,24 +352,47 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             const auto inputSample = channelInput[channelIndex];
             const auto filteredSample = channelFiltered[channelIndex];
             const auto hpFilteredSample = channelHpFiltered[channelIndex];
-            const auto feedbackPath = std::tanh (hpFilteredSample * autoDampedFeedback) * 0.98f;
+            auto processedFb = std::tanh (hpFilteredSample * autoDampedFeedback) * 0.98f;
+
+            if (diffuseActive)
+            {
+                constexpr float kG = 0.65f;
+
+                for (int stage = 0; stage < kNumDiffStages; ++stage)
+                {
+                    const auto maxLen = mDiffLengths[stage];
+
+                    auto& diffBuf = (channel == 0) ? mDiffBuffersL[stage] : mDiffBuffersR[stage];
+                    auto& writePos = (channel == 0) ? mDiffWritePositionsL[stage] : mDiffWritePositionsR[stage];
+
+                    const auto bufSample = diffBuf[static_cast<size_t> (writePos)];
+                    const auto x = processedFb;
+                    const auto y = (-kG * x) + bufSample;
+
+                    diffBuf[static_cast<size_t> (writePos)] = x + (kG * y);
+                    processedFb = y;
+
+                    if (++writePos >= maxLen)
+                        writePos = 0;
+                }
+            }
 
             if (useStereoWidthMatrix)
             {
                 if (channel == 0)
                 {
                     inputL = inputSample;
-                    fbL = feedbackPath;
+                    fbL = processedFb;
                 }
                 else if (channel == 1)
                 {
                     inputR = inputSample;
-                    fbR = feedbackPath;
+                    fbR = processedFb;
                 }
             }
             else
             {
-                delayData[mWritePosition] = inputSample + feedbackPath;
+                delayData[mWritePosition] = inputSample + processedFb;
             }
 
             const auto mixedSample = (inputSample * dryGain) + (filteredSample * wetGain);
@@ -434,6 +480,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout RumbleRoomAudioProcessor::cr
                                                                      3));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("bpm", "BPM",
                                                                     juce::NormalisableRange<float> (40.0f, 260.0f, 0.1f), 120.0f));
+    params.push_back (std::make_unique<juce::AudioParameterFloat> ("wowDepth", "Wow & Flutter",
+                                                                    juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.15f));
+    params.push_back (std::make_unique<juce::AudioParameterBool> ("diffusion", "Diffuse Space", false));
     return { params.begin(), params.end() };
 }
 

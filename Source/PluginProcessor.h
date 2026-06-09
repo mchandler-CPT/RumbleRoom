@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include <JuceHeader.h>
 
 class RumbleRoomAudioProcessor : public juce::AudioProcessor
@@ -60,6 +62,22 @@ private:
     std::atomic<float>* mSyncParam { nullptr };
     std::atomic<float>* mSubdivisionParam { nullptr };
     std::atomic<float>* mBpmParam { nullptr };
+    std::atomic<float>* mWowDepthParam { nullptr };
+    std::atomic<float>* mDiffusionParam { nullptr };
+
+    // Tape pitch modulation (Wow & Flutter) variables
+    float mModPhase { 0.0f };
+
+    static constexpr int kNumDiffStages = 4;
+    // Scale up the allpass stage sizes significantly for deep, lush room reflections
+    const int mDiffLengths[kNumDiffStages] = { 641, 997, 1237, 1511 };
+
+    std::vector<float> mDiffBuffersL[kNumDiffStages];
+    std::vector<float> mDiffBuffersR[kNumDiffStages];
+
+    // Explicitly separate Left and Right write indices to prevent stereo cross-contamination
+    int mDiffWritePositionsL[kNumDiffStages] = { 0, 0, 0, 0 };
+    int mDiffWritePositionsR[kNumDiffStages] = { 0, 0, 0, 0 };
 
     juce::dsp::StateVariableTPTFilter<float> mFilter;
     juce::dsp::StateVariableTPTFilter<float> mHPFilter;

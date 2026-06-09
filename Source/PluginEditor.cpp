@@ -15,6 +15,7 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     configureKnob (mWidthSlider, mWidthLabel, "WIDTH");
     configureKnob (releaseSlider, releaseLabel, "RELEASE");
     configureKnob (mixSlider, mixLabel, "MIX");
+    configureKnob (wowSlider, wowLabel, "WOW");
 
     syncLabel.setText ("SYNC", juce::dontSendNotification);
     syncLabel.setJustificationType (juce::Justification::centredLeft);
@@ -26,6 +27,16 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     addAndMakeVisible (syncToggle);
     syncAttachment = std::make_unique<ButtonAttachment> (audioProcessor.apvts, "sync", syncToggle);
     syncToggle.onClick = [this] { updateSizeControlMode(); };
+
+    diffuseLabel.setText ("DIFFUSE", juce::dontSendNotification);
+    diffuseLabel.setJustificationType (juce::Justification::centredLeft);
+    diffuseLabel.setFont (juce::Font ("Times New Roman", 14.0f, juce::Font::bold));
+    diffuseLabel.setColour (juce::Label::textColourId, BoutiqueLookAndFeel::getCreamColour());
+    addAndMakeVisible (diffuseLabel);
+
+    diffuseToggle.setClickingTogglesState (true);
+    addAndMakeVisible (diffuseToggle);
+    diffuseAttachment = std::make_unique<ButtonAttachment> (audioProcessor.apvts, "diffusion", diffuseToggle);
 
     bpmLabel.setText ("BPM", juce::dontSendNotification);
     bpmLabel.setJustificationType (juce::Justification::centredLeft);
@@ -51,8 +62,9 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     mWidthAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "width", mWidthSlider);
     releaseAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "release", releaseSlider);
     mixAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "dryWet", mixSlider);
+    wowAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "wowDepth", wowSlider);
 
-    setSize (1020, 240);
+    setSize (1140, 240);
 }
 
 RumbleRoomAudioProcessorEditor::~RumbleRoomAudioProcessorEditor()
@@ -93,15 +105,19 @@ void RumbleRoomAudioProcessorEditor::resized()
 {
     auto area = getLocalBounds().reduced (20, 14);
     auto topArea = area.removeFromTop (52);
-    auto syncPanel = topArea.removeFromRight (220).reduced (4, 6);
+    auto syncPanel = topArea.removeFromRight (280).reduced (4, 6);
+    auto diffuseRow = syncPanel.removeFromBottom (24);
+    diffuseToggle.setBounds (diffuseRow.removeFromLeft (24).withTrimmedTop (2));
+    diffuseLabel.setBounds (diffuseRow.removeFromLeft (88));
+
     syncToggle.setBounds (syncPanel.removeFromLeft (24).withTrimmedTop (2));
     syncLabel.setBounds (syncPanel.removeFromLeft (58));
     bpmLabel.setBounds (syncPanel.removeFromLeft (38));
     bpmEditor.setBounds (syncPanel.removeFromLeft (72).reduced (0, 2));
 
-    const auto rowWidth = 980;
+    const auto rowWidth = 1100;
     auto centeredRow = area.withSizeKeepingCentre (rowWidth, area.getHeight());
-    const auto knobWidth = centeredRow.getWidth() / 8;
+    const auto knobWidth = centeredRow.getWidth() / 9;
 
     auto placeKnob = [knobWidth] (juce::Rectangle<int> slot, juce::Slider& slider, juce::Label& label)
     {
@@ -119,6 +135,7 @@ void RumbleRoomAudioProcessorEditor::resized()
     placeKnob (centeredRow.removeFromLeft (knobWidth), mWidthSlider, mWidthLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), releaseSlider, releaseLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), mixSlider, mixLabel);
+    placeKnob (centeredRow.removeFromLeft (knobWidth), wowSlider, wowLabel);
 }
 
 void RumbleRoomAudioProcessorEditor::configureKnob (juce::Slider& slider, juce::Label& label, const juce::String& text)
