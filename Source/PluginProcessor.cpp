@@ -20,6 +20,7 @@ RumbleRoomAudioProcessor::RumbleRoomAudioProcessor()
     mCutoffParam    = apvts.getRawParameterValue ("cutoff");
     mHpCutoffParam  = apvts.getRawParameterValue ("hpCutoff");
     mReleaseParam   = apvts.getRawParameterValue ("release");
+    mDuckDepthParam = apvts.getRawParameterValue ("duckDepth");
     mSyncParam      = apvts.getRawParameterValue ("sync");
     mSubdivisionParam = apvts.getRawParameterValue ("subdivision");
     mBpmParam       = apvts.getRawParameterValue ("bpm");
@@ -130,6 +131,9 @@ void RumbleRoomAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     mSmoothedWidth.setCurrentAndTargetValue (initialWidth);
     mSmoothedRelease.reset (sampleRate, 0.04);
     mSmoothedRelease.setCurrentAndTargetValue (initialRelease);
+    const auto initialDuckDepth = juce::jlimit (0.0f, 1.0f, mDuckDepthParam != nullptr ? mDuckDepthParam->load() : 0.0f);
+    mSmoothedDuckDepth.reset (sampleRate, 0.04);
+    mSmoothedDuckDepth.setCurrentAndTargetValue (initialDuckDepth);
     mSmoothedCutoff.reset (sampleRate, 0.04);
     mSmoothedCutoff.setCurrentAndTargetValue (initialCutoff);
     mSmoothedHpCutoff.reset (sampleRate, 0.04);
@@ -140,6 +144,8 @@ void RumbleRoomAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     mFilter.setCutoffFrequency (initialCutoff);
     mHPFilter.setCutoffFrequency (initialHpCutoff);
     mEnvelopeLevel = 0.0f;
+    mDuckEnvelope = 0.0f;
+    mHoldSamplesLeft = 0;
     mJitterAmount = 0.0f;
     mModPhase = 0.0f;
     mModPhaseSlow = 0.0f;
@@ -203,6 +209,7 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     const auto dryWetTarget = juce::jlimit (0.0f, 1.0f, mDryWetParam != nullptr ? mDryWetParam->load() : 0.26f);
     const auto gritTarget = juce::jlimit (0.0f, 1.0f, mGritParam != nullptr ? mGritParam->load() : 0.41f);
     const auto releaseTarget = juce::jlimit (0.1f, 2.0f, mReleaseParam != nullptr ? mReleaseParam->load() : 0.5f);
+    const auto duckDepthTarget = juce::jlimit (0.0f, 1.0f, mDuckDepthParam != nullptr ? mDuckDepthParam->load() : 0.0f);
     const auto cutoff = juce::jlimit (20.0f, 20000.0f, mCutoffParam != nullptr ? mCutoffParam->load() : 1380.0f);
     const auto hpCutoff = juce::jlimit (20.0f, 8000.0f, mHpCutoffParam != nullptr ? mHpCutoffParam->load() : 35.0f);
     const auto wowDepth = juce::jlimit (0.0f, 1.0f, mWowDepthParam != nullptr ? mWowDepthParam->load() : 0.15f);
@@ -239,6 +246,7 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     mSmoothedGrit.setTargetValue (gritTarget);
     mSmoothedWidth.setTargetValue (juce::jlimit (0.0f, 1.0f, mWidthParam != nullptr ? mWidthParam->load() : 0.0f));
     mSmoothedRelease.setTargetValue (releaseTarget);
+    mSmoothedDuckDepth.setTargetValue (duckDepthTarget);
     mSmoothedCutoff.setTargetValue (cutoff);
     mSmoothedHpCutoff.setTargetValue (hpCutoff);
     mSmoothedDiffusion.setTargetValue (currentDiffusion);
@@ -246,6 +254,19 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     float blockPeak = 0.0f;
     const auto attackCoeff = std::exp (-1.0f / (0.005f * sampleRate));
     constexpr auto boutiqueEnvDepth = 0.7f;
+
+    // Brightness-following filter envelope: decoupled from Release so that the
+    // Release knob is reserved strictly for the ducking recovery time.
+    const auto filterReleaseCoeff = std::exp (-1.0f / (0.25f * sampleRate));
+
+    // Sidechain ducking: fast attack clamps onto fresh transients instantly,
+    // recovery time is driven per-sample by the Release parameter.
+    const auto duckAttackCoeff = std::exp (-1.0f / (0.007f * sampleRate));
+    // Maps the dry envelope onto a 0..1 attenuation amount. ~0.2 peak fully ducks.
+    constexpr auto duckSensitivity = 5.0f;
+    // 50ms peak-hold window bridges waveform zero-crossings so mid-wave valleys
+    // can't prematurely reopen the gate at short Release settings.
+    const int holdWindowSamples = static_cast<int> (0.05f * sampleRate);
 
     const auto dampAlpha = juce::jlimit (0.01f, 0.99f,
                                          std::exp (-juce::MathConstants<float>::twoPi * dampingHz / sampleRate));
@@ -263,9 +284,40 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         const auto grit = mSmoothedGrit.getNextValue();
         const auto widthBlend = mSmoothedWidth.getNextValue();
         const auto releaseSeconds = mSmoothedRelease.getNextValue();
+        const auto duckDepth = mSmoothedDuckDepth.getNextValue();
 
-        const auto filterSmoothSeconds = juce::jmax (0.05f, releaseSeconds);
-        const auto releaseCoeff = std::exp (-1.0f / (filterSmoothSeconds * sampleRate));
+        // --- Sidechain ducking envelope (DRY input only with Peak-Hold) ---
+        // Sampled before the channel loop overwrites the buffer with the wet mix,
+        // so the follower stays completely blind to the wet output and feedback path.
+        float dryPeak = 0.0f;
+        for (int inCh = 0; inCh < totalInputChannels; ++inCh)
+            dryPeak = juce::jmax (dryPeak, std::abs (buffer.getSample (inCh, sample)));
+
+        if (dryPeak > mDuckEnvelope)
+        {
+            mDuckEnvelope = duckAttackCoeff * mDuckEnvelope + (1.0f - duckAttackCoeff) * dryPeak;
+            mHoldSamplesLeft = holdWindowSamples; // Lock and reset the hold window on peaks
+        }
+        else
+        {
+            if (mHoldSamplesLeft > 0)
+            {
+                // Freeze the envelope decay completely while the wave is crossing valleys
+                --mHoldSamplesLeft;
+            }
+            else
+            {
+                // Only decay after the 50ms hold window expires safely
+                const auto duckReleaseCoeff = std::exp (-1.0f / (juce::jmax (0.1f, releaseSeconds) * sampleRate));
+                mDuckEnvelope = duckReleaseCoeff * mDuckEnvelope + (1.0f - duckReleaseCoeff) * dryPeak;
+            }
+        }
+
+        // --- UNTOUCHED STRICT HARD-LIMITER TESTING GATE ---
+        // Keeping this exactly as it was so we can ruthlessly test for leaks
+        const auto duckAmount = juce::jlimit (0.0f, 1.0f, mDuckEnvelope * duckSensitivity);
+        const auto duckGain = 1.0f - (duckDepth * duckAmount);
+
         const auto gritTiltOffset = juce::jmap (grit, 0.0f, 1.0f, 1.0f, 0.7f);
         const auto dryGain = 1.0f - dryWet;
         const auto wetGain = dryWet;
@@ -377,7 +429,11 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
                 delayData[mWritePosition] = inputSample + processedFb;
             }
 
-            const auto mixedSample = (inputSample * dryGain) + (filteredSample * wetGain);
+            // Ducking is applied here, and ONLY here: as a clean output fader on the
+            // wet signal just before it meets the dry path. The delay buffer write and
+            // feedback loop above are untouched, so the tail keeps accumulating in the
+            // background and swells back in once the dry input releases.
+            const auto mixedSample = (inputSample * dryGain) + (filteredSample * wetGain * duckGain);
             channelData[sample] = applySoftSafetyLimit (mixedSample);
         }
 
@@ -395,19 +451,20 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             delayR[mWritePosition] = (parallelMix * parallelR) + (widthBlend * pingPongR);
         }
 
-        float absInput = 0.0f;
+        // Brightness-following envelope drives the filter cutoff. It uses the dry peak
+        // captured above (the buffer now holds the wet mix) plus the wet tap, and decays
+        // on its own fixed time constant so the Release knob stays dedicated to ducking.
+        float absInput = dryPeak;
         for (int inCh = 0; inCh < totalInputChannels; ++inCh)
         {
             const auto chIdx = juce::jmin (inCh, maxProcessChannels - 1);
-            absInput = juce::jmax (absInput,
-                                   std::abs (buffer.getSample (inCh, sample)),
-                                   std::abs (channelHpFiltered[chIdx]));
+            absInput = juce::jmax (absInput, std::abs (channelHpFiltered[chIdx]));
         }
 
         if (absInput > mEnvelopeLevel)
             mEnvelopeLevel = attackCoeff * mEnvelopeLevel + (1.0f - attackCoeff) * absInput;
         else
-            mEnvelopeLevel = releaseCoeff * mEnvelopeLevel + (1.0f - releaseCoeff) * absInput;
+            mEnvelopeLevel = filterReleaseCoeff * mEnvelopeLevel + (1.0f - filterReleaseCoeff) * absInput;
 
         const auto envModulation = mEnvelopeLevel * 8000.0f * boutiqueEnvDepth;
         const auto modulatedCutoff = juce::jlimit (20.0f, 20000.0f, (smoothedCutoff * gritTiltOffset) + envModulation);
@@ -468,6 +525,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout RumbleRoomAudioProcessor::cr
                                                                     juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("release", "Release",
                                                                     juce::NormalisableRange<float> (0.1f, 2.0f, 0.001f), 0.5f));
+    params.push_back (std::make_unique<juce::AudioParameterFloat> ("duckDepth", "Ducking Depth",
+                                                                    juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("cutoff", "Cutoff",
                                                                     juce::NormalisableRange<float> (20.0f, 20000.0f, 1.0f, 0.35f), 1380.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("hpCutoff", "Bright",

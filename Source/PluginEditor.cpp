@@ -14,6 +14,7 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     configureKnob (gritSlider, gritLabel, "GRIT");
     configureKnob (mWidthSlider, mWidthLabel, "WIDTH");
     configureKnob (releaseSlider, releaseLabel, "RELEASE");
+    configureKnob (duckSlider, duckLabel, "DUCK");
     configureKnob (mixSlider, mixLabel, "MIX");
     configureKnob (wowSlider, wowLabel, "WOW");
     configureKnob (wowSpeedSlider, wowSpeedLabel, "WOW SPD");
@@ -54,13 +55,14 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     gritAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "grit", gritSlider);
     mWidthAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "width", mWidthSlider);
     releaseAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "release", releaseSlider);
+    duckAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "duckDepth", duckSlider);
     mixAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "dryWet", mixSlider);
     wowAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "wowDepth", wowSlider);
     wowSpeedAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "wowSpeed", wowSpeedSlider);
     diffuseAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "diffusion", diffuseSlider);
     dampingAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "damping", dampingSlider);
 
-    setSize (1510, 240);
+    setSize (1632, 240);
 }
 
 RumbleRoomAudioProcessorEditor::~RumbleRoomAudioProcessorEditor()
@@ -107,9 +109,9 @@ void RumbleRoomAudioProcessorEditor::resized()
     bpmLabel.setBounds (syncPanel.removeFromLeft (38));
     bpmEditor.setBounds (syncPanel.removeFromLeft (72).reduced (0, 2));
 
-    const auto rowWidth = 1464;
+    const auto rowWidth = 1586;
     auto centeredRow = area.withSizeKeepingCentre (rowWidth, area.getHeight());
-    const auto knobWidth = centeredRow.getWidth() / 12;
+    const auto knobWidth = centeredRow.getWidth() / 13;
 
     auto placeKnob = [knobWidth] (juce::Rectangle<int> slot, juce::Slider& slider, juce::Label& label)
     {
@@ -126,6 +128,7 @@ void RumbleRoomAudioProcessorEditor::resized()
     placeKnob (centeredRow.removeFromLeft (knobWidth), gritSlider, gritLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), mWidthSlider, mWidthLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), releaseSlider, releaseLabel);
+    placeKnob (centeredRow.removeFromLeft (knobWidth), duckSlider, duckLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), mixSlider, mixLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), wowSlider, wowLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), wowSpeedSlider, wowSpeedLabel);

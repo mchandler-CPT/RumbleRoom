@@ -59,6 +59,7 @@ private:
     std::atomic<float>* mCutoffParam { nullptr };
     std::atomic<float>* mHpCutoffParam { nullptr };
     std::atomic<float>* mReleaseParam { nullptr };
+    std::atomic<float>* mDuckDepthParam { nullptr };
     std::atomic<float>* mSyncParam { nullptr };
     std::atomic<float>* mSubdivisionParam { nullptr };
     std::atomic<float>* mBpmParam { nullptr };
@@ -139,11 +140,16 @@ private:
     juce::LinearSmoothedValue<float> mSmoothedGrit;
     juce::LinearSmoothedValue<float> mSmoothedWidth;
     juce::LinearSmoothedValue<float> mSmoothedRelease;
+    juce::LinearSmoothedValue<float> mSmoothedDuckDepth;
     juce::LinearSmoothedValue<float> mSmoothedDiffusion;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mSmoothedCutoff;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> mSmoothedHpCutoff;
     std::atomic<float> mInputMeterLevel { 0.0f };
     float mEnvelopeLevel { 0.0f };
+
+    // Sidechain ducking engine: tracks the DRY input only, blind to wet/feedback.
+    float mDuckEnvelope { 0.0f };
+    int mHoldSamplesLeft { 0 };
     float mJitterAmount { 0.0f };
     juce::Random mRandom;
 

@@ -36,6 +36,7 @@ private:
     juce::Slider gritSlider;
     juce::Slider mWidthSlider;
     juce::Slider releaseSlider;
+    juce::Slider duckSlider;
     juce::Slider mixSlider;
     juce::Slider wowSlider;
     juce::Slider wowSpeedSlider;
@@ -49,6 +50,7 @@ private:
     juce::Label gritLabel;
     juce::Label mWidthLabel;
     juce::Label releaseLabel;
+    juce::Label duckLabel;
     juce::Label mixLabel;
     juce::Label wowLabel;
     juce::Label wowSpeedLabel;
@@ -69,6 +71,7 @@ private:
     std::unique_ptr<SliderAttachment> gritAttachment;
     std::unique_ptr<SliderAttachment> mWidthAttachment;
     std::unique_ptr<SliderAttachment> releaseAttachment;
+    std::unique_ptr<SliderAttachment> duckAttachment;
     std::unique_ptr<SliderAttachment> mixAttachment;
     std::unique_ptr<SliderAttachment> wowAttachment;
     std::unique_ptr<SliderAttachment> wowSpeedAttachment;
