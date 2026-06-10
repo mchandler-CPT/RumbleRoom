@@ -118,7 +118,7 @@ void RumbleRoomAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     const auto initialDryWet = juce::jlimit (0.0f, 1.0f, mDryWetParam != nullptr ? mDryWetParam->load() : 0.26f);
     const auto initialGrit = juce::jlimit (0.0f, 1.0f, mGritParam != nullptr ? mGritParam->load() : 0.41f);
     const auto initialWidth = juce::jlimit (0.0f, 1.0f, mWidthParam != nullptr ? mWidthParam->load() : 0.0f);
-    const auto initialRelease = juce::jlimit (0.1f, 2.0f, mReleaseParam != nullptr ? mReleaseParam->load() : 0.5f);
+    const auto initialRelease = juce::jlimit (0.001f, 2.0f, mReleaseParam != nullptr ? mReleaseParam->load() : 0.5f);
     mSmoothedDelayTimeMs.reset (sampleRate, 0.04);
     mSmoothedDelayTimeMs.setCurrentAndTargetValue (initialDelayMs);
     mSmoothedFeedback.reset (sampleRate, 0.04);
@@ -208,7 +208,7 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     const auto feedbackTarget = juce::jlimit (0.0f, 0.99f, mFeedbackParam != nullptr ? mFeedbackParam->load() : 0.25f);
     const auto dryWetTarget = juce::jlimit (0.0f, 1.0f, mDryWetParam != nullptr ? mDryWetParam->load() : 0.26f);
     const auto gritTarget = juce::jlimit (0.0f, 1.0f, mGritParam != nullptr ? mGritParam->load() : 0.41f);
-    const auto releaseTarget = juce::jlimit (0.1f, 2.0f, mReleaseParam != nullptr ? mReleaseParam->load() : 0.5f);
+    const auto releaseTarget = juce::jlimit (0.001f, 2.0f, mReleaseParam != nullptr ? mReleaseParam->load() : 0.5f);
     const auto duckDepthTarget = juce::jlimit (0.0f, 1.0f, mDuckDepthParam != nullptr ? mDuckDepthParam->load() : 0.0f);
     const auto cutoff = juce::jlimit (20.0f, 20000.0f, mCutoffParam != nullptr ? mCutoffParam->load() : 1380.0f);
     const auto hpCutoff = juce::jlimit (20.0f, 8000.0f, mHpCutoffParam != nullptr ? mHpCutoffParam->load() : 35.0f);
@@ -306,7 +306,7 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             else
             {
                 // Only decay after the 50ms hold window expires safely
-                const auto duckReleaseCoeff = std::exp (-1.0f / (juce::jmax (0.1f, releaseSeconds) * sampleRate));
+                const auto duckReleaseCoeff = std::exp (-1.0f / (juce::jmax (0.001f, releaseSeconds) * sampleRate));
                 mDuckEnvelope = duckReleaseCoeff * mDuckEnvelope + (1.0f - duckReleaseCoeff) * dryPeak;
             }
         }
@@ -319,10 +319,16 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         // 2. Define our Compression Threshold (-30 dB is an excellent musical pocket)
         constexpr float thresholdDb = -30.0f;
 
-        // 3. Scale our Compression Ratio directly off our user's Ducking Depth knob!
-        // At 0.0 Depth -> Ratio is 1:1 (No compression at all, completely bypassed)
-        // At 1.0 Depth -> Ratio climbs smoothly to 20:1 (Heavy, luxurious downward compression)
-        const float ratio = 1.0f + (duckDepth * 19.0f);
+        // --- SKEWED PROGRESSIVE RATIO COMPONENT ---
+        // Square the smoothed knob depth to give the bottom half of the dial
+        // ultra-fine precision control, pushing aggressive compression to the top.
+        const float skewedDepth = duckDepth * duckDepth;
+
+        // 3. Scale our Compression Ratio directly off our progressive curve!
+        // At 0.0 panel -> Ratio is 1:1 (True bypass)
+        // At 0.5 panel -> Ratio is ~5.75:1 (Perfect smooth studio compression pocket)
+        // At 1.0 panel -> Ratio hits 20:1 (Heavy downward limiting)
+        const float ratio = 1.0f + (skewedDepth * 19.0f);
 
         float compressedOutputDb = envelopeDb;
 
@@ -544,7 +550,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RumbleRoomAudioProcessor::cr
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("width", "Width",
                                                                     juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("release", "Release",
-                                                                    juce::NormalisableRange<float> (0.1f, 2.0f, 0.001f), 0.5f));
+                                                                    juce::NormalisableRange<float> (0.001f, 2.0f, 0.001f, 0.35f), 0.5f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("duckDepth", "Ducking Depth",
                                                                     juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("cutoff", "Cutoff",
