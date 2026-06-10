@@ -24,6 +24,7 @@ RumbleRoomAudioProcessor::RumbleRoomAudioProcessor()
     mSubdivisionParam = apvts.getRawParameterValue ("subdivision");
     mBpmParam       = apvts.getRawParameterValue ("bpm");
     mWowDepthParam  = apvts.getRawParameterValue ("wowDepth");
+    mWowSpeedParam  = apvts.getRawParameterValue ("wowSpeed");
     mDiffusionParam = apvts.getRawParameterValue ("diffusion");
     mDampingParam   = apvts.getRawParameterValue ("damping");
 }
@@ -141,6 +142,7 @@ void RumbleRoomAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     mEnvelopeLevel = 0.0f;
     mJitterAmount = 0.0f;
     mModPhase = 0.0f;
+    mModPhaseSlow = 0.0f;
     mDampStateL = 0.0f;
     mDampStateR = 0.0f;
 
@@ -182,8 +184,8 @@ bool RumbleRoomAudioProcessor::isBusesLayoutSupported (const BusesLayout& layout
 void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ignoreUnused (midiMessages);
-
     juce::ScopedNoDenormals noDenormals;
+
     const auto totalInputChannels = getTotalNumInputChannels();
     const auto totalOutputChannels = getTotalNumOutputChannels();
     const auto numSamples = buffer.getNumSamples();
@@ -203,6 +205,11 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     const auto releaseTarget = juce::jlimit (0.1f, 2.0f, mReleaseParam != nullptr ? mReleaseParam->load() : 0.5f);
     const auto cutoff = juce::jlimit (20.0f, 20000.0f, mCutoffParam != nullptr ? mCutoffParam->load() : 1380.0f);
     const auto hpCutoff = juce::jlimit (20.0f, 8000.0f, mHpCutoffParam != nullptr ? mHpCutoffParam->load() : 35.0f);
+    const auto wowDepth = juce::jlimit (0.0f, 1.0f, mWowDepthParam != nullptr ? mWowDepthParam->load() : 0.15f);
+    const auto wowSpeed = juce::jlimit (0.1f, 6.0f, mWowSpeedParam != nullptr ? mWowSpeedParam->load() : 1.0f);
+    const auto currentDiffusion = juce::jlimit (0.0f, 1.0f, mDiffusionParam != nullptr ? mDiffusionParam->load() : 0.0f);
+    const auto dampingHz = juce::jlimit (200.0f, 20000.0f, mDampingParam != nullptr ? mDampingParam->load() : 12000.0f);
+
     auto delayTargetMs = juce::jlimit (0.1f, 1000.0f, mDelayTimeParam != nullptr ? mDelayTimeParam->load() : 20.0f);
     const auto syncEnabled = (mSyncParam != nullptr && mSyncParam->load() > 0.5f);
 
@@ -234,49 +241,57 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     mSmoothedRelease.setTargetValue (releaseTarget);
     mSmoothedCutoff.setTargetValue (cutoff);
     mSmoothedHpCutoff.setTargetValue (hpCutoff);
-    mSmoothedDiffusion.setTargetValue (juce::jlimit (0.0f, 1.0f, mDiffusionParam != nullptr ? mDiffusionParam->load() : 0.0f));
+    mSmoothedDiffusion.setTargetValue (currentDiffusion);
+
     float blockPeak = 0.0f;
     const auto attackCoeff = std::exp (-1.0f / (0.005f * sampleRate));
     constexpr auto boutiqueEnvDepth = 0.7f;
 
+    const auto dampAlpha = juce::jlimit (0.01f, 0.99f,
+                                         std::exp (-juce::MathConstants<float>::twoPi * dampingHz / sampleRate));
+
     constexpr int maxProcessChannels = 2;
-    float channelInput[maxProcessChannels] {};
-    float channelFiltered[maxProcessChannels] {};
     float channelHpFiltered[maxProcessChannels] {};
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        mModPhase += 1.2f / sampleRate;
-        if (mModPhase >= 1.0f)
-            mModPhase -= 1.0f;
-
+        const auto activeDiffusion = mSmoothedDiffusion.getNextValue();
         const auto smoothedCutoff = mSmoothedCutoff.getNextValue();
         const auto smoothedHpCutoff = mSmoothedHpCutoff.getNextValue();
-
         const auto feedback = mSmoothedFeedback.getNextValue();
         const auto dryWet = mSmoothedDryWet.getNextValue();
         const auto grit = mSmoothedGrit.getNextValue();
+        const auto widthBlend = mSmoothedWidth.getNextValue();
         const auto releaseSeconds = mSmoothedRelease.getNextValue();
+
         const auto filterSmoothSeconds = juce::jmax (0.05f, releaseSeconds);
         const auto releaseCoeff = std::exp (-1.0f / (filterSmoothSeconds * sampleRate));
         const auto gritTiltOffset = juce::jmap (grit, 0.0f, 1.0f, 1.0f, 0.7f);
         const auto dryGain = 1.0f - dryWet;
         const auto wetGain = dryWet;
+
         const auto delayTimeMs = mSmoothedDelayTimeMs.getNextValue();
-        const auto delayTimeSeconds = delayTimeMs * 0.001f;
-        const auto delaySamples = delayTimeSeconds * sampleRate;
+        const auto delaySamples = (delayTimeMs * 0.001f) * sampleRate;
         const auto decorrelationAmount = juce::jmap (delayTimeMs, 0.1f, 1000.0f, 0.0f, 0.015f);
+
+        mModPhase += wowSpeed / sampleRate;
+        if (mModPhase >= 1.0f)
+            mModPhase -= 1.0f;
+
+        mModPhaseSlow += (wowSpeed * 0.163f) / sampleRate;
+        if (mModPhaseSlow >= 1.0f)
+            mModPhaseSlow -= 1.0f;
 
         mJitterAmount += (mRandom.nextFloat() * 2.0f - 1.0f) * 0.001f;
         mJitterAmount *= 0.999f;
         const auto jitterSamples = mJitterAmount * grit * 2.5f;
-        const auto widthBlend = mSmoothedWidth.getNextValue();
-        const auto currentDiffusion = mSmoothedDiffusion.getNextValue();
+
         const auto useStereoWidthMatrix = (totalOutputChannels == 2 && delayChannels >= 2);
         constexpr auto widthTimeSpread = 0.2f;
         const auto channelDelaySamplesL = delaySamples * (1.0f - (widthBlend * widthTimeSpread));
         const auto channelDelaySamplesR = delaySamples * (1.0f + (widthBlend * widthTimeSpread));
         const auto autoDampedFeedback = juce::jlimit (0.0f, 0.99f, feedback);
+
         float inputL = 0.0f;
         float inputR = 0.0f;
         float fbL = 0.0f;
@@ -294,19 +309,16 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             else if (channel % 2 == 1)
                 channelDelaySamples = delaySamples * (1.0f + decorrelationAmount);
 
-            const auto wowDepth = mWowDepthParam != nullptr ? mWowDepthParam->load() : 0.15f;
             const auto maxSafeSwing = channelDelaySamples * 0.80f;
-            const auto targetSwing = wowDepth * 150.0f;
-            const auto safeSwing = juce::jmin (targetSwing, maxSafeSwing);
-            const auto lfoOffsetSamples = std::sin (mModPhase * juce::MathConstants<float>::twoPi) * safeSwing;
+            const auto safeSwing = juce::jmin (wowDepth * 150.0f, maxSafeSwing);
+            const auto fastWarble = std::sin (mModPhase * juce::MathConstants<float>::twoPi);
+            const auto slowSag = std::sin (mModPhaseSlow * juce::MathConstants<float>::twoPi);
+            const auto asymmetricMod = fastWarble * (0.65f + (slowSag * 0.35f));
+            const auto lfoOffsetSamples = asymmetricMod * safeSwing;
 
-            float readPosition = static_cast<float> (mWritePosition) - channelDelaySamples;
-            while (readPosition < 0.0f)
-                readPosition += static_cast<float> (delayBufferLength);
-            while (readPosition >= static_cast<float> (delayBufferLength))
-                readPosition -= static_cast<float> (delayBufferLength);
+            const auto readPosition = static_cast<float> (mWritePosition) - channelDelaySamples;
+            auto jitteredReadPos = readPosition + jitterSamples + lfoOffsetSamples;
 
-            float jitteredReadPos = readPosition + jitterSamples + lfoOffsetSamples;
             while (jitteredReadPos < 0.0f)
                 jitteredReadPos += static_cast<float> (delayBufferLength);
             while (jitteredReadPos >= static_cast<float> (delayBufferLength))
@@ -318,68 +330,32 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
             const auto inputSample = channelData[sample];
             blockPeak = juce::jmax (blockPeak, std::abs (inputSample));
-            const auto delayedA = delayData[readIndexA];
-            const auto delayedB = delayData[readIndexB];
-            const auto delayedSample = delayedA + frac * (delayedB - delayedA);
+
+            const auto delayedSample = delayData[readIndexA] + frac * (delayData[readIndexB] - delayData[readIndexA]);
 
             const auto grittySample = applyWarmSaturation (delayedSample, grit);
             const auto filteredSample = mFilter.processSample (channel % delayChannels, grittySample);
             auto hpFilteredSample = mHPFilter.processSample (channel % delayChannels, filteredSample);
 
-            if (currentDiffusion > 0.001f)
+            if (activeDiffusion > 0.001f)
             {
-                const auto kG = currentDiffusion * 0.62f;
                 auto* filterArray = (channel == 0) ? mFiltersL : mFiltersR;
+                const auto currentKG = activeDiffusion * 0.62f;
 
-                hpFilteredSample = filterArray[0].process (hpFilteredSample, kG, sampleRate);
-                hpFilteredSample = filterArray[1].process (hpFilteredSample, kG, sampleRate);
-                hpFilteredSample = filterArray[2].process (hpFilteredSample, kG, sampleRate);
-                hpFilteredSample = filterArray[3].process (hpFilteredSample, kG, sampleRate);
+                hpFilteredSample = filterArray[0].process (hpFilteredSample, currentKG, sampleRate);
+                hpFilteredSample = filterArray[1].process (hpFilteredSample, currentKG, sampleRate);
+                hpFilteredSample = filterArray[2].process (hpFilteredSample, currentKG, sampleRate);
+                hpFilteredSample = filterArray[3].process (hpFilteredSample, currentKG, sampleRate);
             }
 
-            channelInput[channelIndex] = inputSample;
-            channelFiltered[channelIndex] = filteredSample;
             channelHpFiltered[channelIndex] = hpFilteredSample;
-        }
 
-        float absInput = 0.0f;
-        for (int inCh = 0; inCh < totalInputChannels; ++inCh)
-        {
-            const auto channelIndex = juce::jmin (inCh, maxProcessChannels - 1);
-            absInput = juce::jmax (absInput,
-                                   std::abs (buffer.getSample (inCh, sample)),
-                                   std::abs (channelHpFiltered[channelIndex]));
-        }
-
-        if (absInput > mEnvelopeLevel)
-            mEnvelopeLevel = attackCoeff * mEnvelopeLevel + (1.0f - attackCoeff) * absInput;
-        else
-            mEnvelopeLevel = releaseCoeff * mEnvelopeLevel + (1.0f - releaseCoeff) * absInput;
-
-        const auto envModulation = mEnvelopeLevel * 8000.0f * boutiqueEnvDepth;
-        const auto modulatedCutoff = juce::jlimit (20.0f, 20000.0f, (smoothedCutoff * gritTiltOffset) + envModulation);
-        mFilter.setCutoffFrequency (modulatedCutoff);
-        mHPFilter.setCutoffFrequency (smoothedHpCutoff);
-
-        for (int channel = 0; channel < totalOutputChannels; ++channel)
-        {
-            const auto channelIndex = juce::jmin (channel, maxProcessChannels - 1);
-            auto* channelData = buffer.getWritePointer (channel);
-            auto* delayData = mDelayBuffer.getWritePointer (channel % delayChannels);
-
-            const auto inputSample = channelInput[channelIndex];
-            const auto filteredSample = channelFiltered[channelIndex];
-            const auto hpFilteredSample = channelHpFiltered[channelIndex];
             auto processedFb = std::tanh (hpFilteredSample * autoDampedFeedback) * 0.98f;
 
-            if (currentDiffusion > 0.001f)
+            if (activeDiffusion > 0.001f)
             {
-                const auto dampingHz = mDampingParam != nullptr ? mDampingParam->load() : 12000.0f;
-                const auto alpha = juce::jlimit (0.01f, 0.99f,
-                                                 std::exp (-juce::MathConstants<float>::twoPi * dampingHz / sampleRate));
                 auto& dampState = (channel == 0) ? mDampStateL : mDampStateR;
-
-                processedFb = (processedFb * (1.0f - alpha)) + (dampState * alpha);
+                processedFb = (processedFb * (1.0f - dampAlpha)) + (dampState * dampAlpha);
                 dampState = processedFb;
             }
 
@@ -419,12 +395,29 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             delayR[mWritePosition] = (parallelMix * parallelR) + (widthBlend * pingPongR);
         }
 
-        ++mWritePosition;
-        if (mWritePosition >= delayBufferLength)
+        float absInput = 0.0f;
+        for (int inCh = 0; inCh < totalInputChannels; ++inCh)
+        {
+            const auto chIdx = juce::jmin (inCh, maxProcessChannels - 1);
+            absInput = juce::jmax (absInput,
+                                   std::abs (buffer.getSample (inCh, sample)),
+                                   std::abs (channelHpFiltered[chIdx]));
+        }
+
+        if (absInput > mEnvelopeLevel)
+            mEnvelopeLevel = attackCoeff * mEnvelopeLevel + (1.0f - attackCoeff) * absInput;
+        else
+            mEnvelopeLevel = releaseCoeff * mEnvelopeLevel + (1.0f - releaseCoeff) * absInput;
+
+        const auto envModulation = mEnvelopeLevel * 8000.0f * boutiqueEnvDepth;
+        const auto modulatedCutoff = juce::jlimit (20.0f, 20000.0f, (smoothedCutoff * gritTiltOffset) + envModulation);
+        mFilter.setCutoffFrequency (modulatedCutoff);
+        mHPFilter.setCutoffFrequency (smoothedHpCutoff);
+
+        if (++mWritePosition >= delayBufferLength)
             mWritePosition = 0;
     }
 
-    // Smoothed input meter for the editor jewel light.
     const auto previous = mInputMeterLevel.load();
     const auto smoothed = juce::jmax (blockPeak, previous * 0.92f);
     mInputMeterLevel.store (smoothed);
@@ -488,6 +481,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout RumbleRoomAudioProcessor::cr
                                                                     juce::NormalisableRange<float> (40.0f, 260.0f, 0.1f), 120.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("wowDepth", "Wow & Flutter",
                                                                     juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.15f));
+    params.push_back (std::make_unique<juce::AudioParameterFloat> ("wowSpeed", "Wow Speed",
+                                                                    juce::NormalisableRange<float> (0.1f, 6.0f, 0.01f, 0.4f), 1.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("diffusion", "Diffusion",
                                                                     juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("damping", "Damping",

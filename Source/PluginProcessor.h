@@ -63,6 +63,7 @@ private:
     std::atomic<float>* mSubdivisionParam { nullptr };
     std::atomic<float>* mBpmParam { nullptr };
     std::atomic<float>* mWowDepthParam { nullptr };
+    std::atomic<float>* mWowSpeedParam { nullptr };
     std::atomic<float>* mDiffusionParam { nullptr };
     std::atomic<float>* mDampingParam { nullptr };
 
@@ -71,7 +72,8 @@ private:
     float mDampStateR = 0.0f;
 
     // Tape pitch modulation (Wow & Flutter) variables
-    float mModPhase { 0.0f };
+    float mModPhase { 0.0f };      // Fast mechanical warble tracker
+    float mModPhaseSlow { 0.0f };  // Slow thermal voice sag tracker
 
     struct ModulatedAllpass
     {

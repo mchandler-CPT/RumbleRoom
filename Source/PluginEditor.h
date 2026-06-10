@@ -38,6 +38,7 @@ private:
     juce::Slider releaseSlider;
     juce::Slider mixSlider;
     juce::Slider wowSlider;
+    juce::Slider wowSpeedSlider;
     juce::Slider diffuseSlider;
     juce::Slider dampingSlider;
 
@@ -50,6 +51,7 @@ private:
     juce::Label releaseLabel;
     juce::Label mixLabel;
     juce::Label wowLabel;
+    juce::Label wowSpeedLabel;
     juce::Label diffuseLabel;
     juce::Label dampingLabel;
     juce::ToggleButton syncToggle;
@@ -69,6 +71,7 @@ private:
     std::unique_ptr<SliderAttachment> releaseAttachment;
     std::unique_ptr<SliderAttachment> mixAttachment;
     std::unique_ptr<SliderAttachment> wowAttachment;
+    std::unique_ptr<SliderAttachment> wowSpeedAttachment;
     std::unique_ptr<SliderAttachment> diffuseAttachment;
     std::unique_ptr<SliderAttachment> dampingAttachment;
     std::unique_ptr<ButtonAttachment> syncAttachment;

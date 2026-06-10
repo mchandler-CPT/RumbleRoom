@@ -16,6 +16,7 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     configureKnob (releaseSlider, releaseLabel, "RELEASE");
     configureKnob (mixSlider, mixLabel, "MIX");
     configureKnob (wowSlider, wowLabel, "WOW");
+    configureKnob (wowSpeedSlider, wowSpeedLabel, "WOW SPD");
     configureKnob (diffuseSlider, diffuseLabel, "DIFFUSE");
     configureKnob (dampingSlider, dampingLabel, "DAMPING");
 
@@ -55,10 +56,11 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     releaseAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "release", releaseSlider);
     mixAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "dryWet", mixSlider);
     wowAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "wowDepth", wowSlider);
+    wowSpeedAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "wowSpeed", wowSpeedSlider);
     diffuseAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "diffusion", diffuseSlider);
     dampingAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "damping", dampingSlider);
 
-    setSize (1390, 240);
+    setSize (1510, 240);
 }
 
 RumbleRoomAudioProcessorEditor::~RumbleRoomAudioProcessorEditor()
@@ -105,9 +107,9 @@ void RumbleRoomAudioProcessorEditor::resized()
     bpmLabel.setBounds (syncPanel.removeFromLeft (38));
     bpmEditor.setBounds (syncPanel.removeFromLeft (72).reduced (0, 2));
 
-    const auto rowWidth = 1342;
+    const auto rowWidth = 1464;
     auto centeredRow = area.withSizeKeepingCentre (rowWidth, area.getHeight());
-    const auto knobWidth = centeredRow.getWidth() / 11;
+    const auto knobWidth = centeredRow.getWidth() / 12;
 
     auto placeKnob = [knobWidth] (juce::Rectangle<int> slot, juce::Slider& slider, juce::Label& label)
     {
@@ -126,6 +128,7 @@ void RumbleRoomAudioProcessorEditor::resized()
     placeKnob (centeredRow.removeFromLeft (knobWidth), releaseSlider, releaseLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), mixSlider, mixLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), wowSlider, wowLabel);
+    placeKnob (centeredRow.removeFromLeft (knobWidth), wowSpeedSlider, wowSpeedLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), diffuseSlider, diffuseLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), dampingSlider, dampingLabel);
 }
