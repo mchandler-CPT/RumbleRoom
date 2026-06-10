@@ -165,29 +165,29 @@ void RumbleRoomAudioProcessorEditor::updateSizeControlMode()
 
     if (syncEnabled)
     {
-        sizeSlider.setRange (0.0, 10.0, 1.0);
+        sizeSlider.setRange (0.0, 13.0, 1.0);
         sizeSlider.setNumDecimalPlacesToDisplay (0);
         sizeSlider.setScrollWheelEnabled (true);
         sizeSlider.textFromValueFunction = [] (double value)
         {
-            static const juce::StringArray labels { "1/1", "1/2", "1/2T", "1/4", "1/4T",
+            static const juce::StringArray labels { "8/1", "4/1", "2/1", "1/1", "1/2", "1/2T", "1/4", "1/4T",
                                                     "1/8", "1/8T", "1/16", "1/16T", "1/32", "1/64" };
             const auto idx = juce::jlimit (0, labels.size() - 1, juce::roundToInt (value));
             return labels[idx];
         };
         sizeSlider.valueFromTextFunction = [] (const juce::String& text)
         {
-            static const juce::StringArray labels { "1/1", "1/2", "1/2T", "1/4", "1/4T",
+            static const juce::StringArray labels { "8/1", "4/1", "2/1", "1/1", "1/2", "1/2T", "1/4", "1/4T",
                                                     "1/8", "1/8T", "1/16", "1/16T", "1/32", "1/64" };
             const auto idx = labels.indexOf (text.trim());
-            return idx >= 0 ? static_cast<double> (idx) : 3.0;
+            return idx >= 0 ? static_cast<double> (idx) : 6.0;
         };
         sizeSubdivisionAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "subdivision", sizeSlider);
     }
     else
     {
-        sizeSlider.setRange (0.1, 1000.0, 0.01);
-        sizeSlider.setSkewFactor (0.35);
+        sizeSlider.setRange (0.1, 8000.0, 0.01);
+        sizeSlider.setSkewFactor (0.28);
         sizeSlider.setNumDecimalPlacesToDisplay (1);
         sizeSlider.setScrollWheelEnabled (false);
         sizeSlider.textFromValueFunction = [] (double value) { return juce::String (value, 1) + " ms"; };
