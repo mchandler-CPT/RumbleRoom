@@ -262,8 +262,6 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
     // Sidechain ducking: fast attack clamps onto fresh transients instantly,
     // recovery time is driven per-sample by the Release parameter.
     const auto duckAttackCoeff = std::exp (-1.0f / (0.007f * sampleRate));
-    // Maps the dry envelope onto a 0..1 attenuation amount. ~0.2 peak fully ducks.
-    constexpr auto duckSensitivity = 5.0f;
     // 50ms peak-hold window bridges waveform zero-crossings so mid-wave valleys
     // can't prematurely reopen the gate at short Release settings.
     const int holdWindowSamples = static_cast<int> (0.05f * sampleRate);
@@ -313,10 +311,32 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             }
         }
 
-        // --- UNTOUCHED STRICT HARD-LIMITER TESTING GATE ---
-        // Keeping this exactly as it was so we can ruthlessly test for leaks
-        const auto duckAmount = juce::jlimit (0.0f, 1.0f, mDuckEnvelope * duckSensitivity);
-        const auto duckGain = 1.0f - (duckDepth * duckAmount);
+        // --- STUDIO-GRADE COMPRESSOR ENGINE ---
+        // 1. Convert our linear tracking envelope value to Decibels (dBFS)
+        // We use a safety floor of 0.0001f (-80 dB) to prevent log10(0) infinity explosions.
+        const float envelopeDb = 20.0f * std::log10 (juce::jmax (0.0001f, mDuckEnvelope));
+
+        // 2. Define our Compression Threshold (-30 dB is an excellent musical pocket)
+        constexpr float thresholdDb = -30.0f;
+
+        // 3. Scale our Compression Ratio directly off our user's Ducking Depth knob!
+        // At 0.0 Depth -> Ratio is 1:1 (No compression at all, completely bypassed)
+        // At 1.0 Depth -> Ratio climbs smoothly to 20:1 (Heavy, luxurious downward compression)
+        const float ratio = 1.0f + (duckDepth * 19.0f);
+
+        float compressedOutputDb = envelopeDb;
+
+        // 4. Apply Downward Gain Reduction above the Threshold
+        if (envelopeDb > thresholdDb)
+        {
+            float excessDb = envelopeDb - thresholdDb;
+            // Compress the over-shoot by our parameter-driven ratio
+            compressedOutputDb = thresholdDb + (excessDb / ratio);
+        }
+
+        // 5. Calculate the Gain Reduction delta and convert back to a linear amplitude multiplier
+        const float gainReductionDb = compressedOutputDb - envelopeDb;
+        const float duckGain = std::pow (10.0f, gainReductionDb * 0.05f);
 
         const auto gritTiltOffset = juce::jmap (grit, 0.0f, 1.0f, 1.0f, 0.7f);
         const auto dryGain = 1.0f - dryWet;
