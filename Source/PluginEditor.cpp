@@ -17,6 +17,7 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     configureKnob (mixSlider, mixLabel, "MIX");
     configureKnob (wowSlider, wowLabel, "WOW");
     configureKnob (diffuseSlider, diffuseLabel, "DIFFUSE");
+    configureKnob (dampingSlider, dampingLabel, "DAMPING");
 
     syncLabel.setText ("SYNC", juce::dontSendNotification);
     syncLabel.setJustificationType (juce::Justification::centredLeft);
@@ -55,8 +56,9 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     mixAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "dryWet", mixSlider);
     wowAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "wowDepth", wowSlider);
     diffuseAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "diffusion", diffuseSlider);
+    dampingAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "damping", dampingSlider);
 
-    setSize (1270, 240);
+    setSize (1390, 240);
 }
 
 RumbleRoomAudioProcessorEditor::~RumbleRoomAudioProcessorEditor()
@@ -103,9 +105,9 @@ void RumbleRoomAudioProcessorEditor::resized()
     bpmLabel.setBounds (syncPanel.removeFromLeft (38));
     bpmEditor.setBounds (syncPanel.removeFromLeft (72).reduced (0, 2));
 
-    const auto rowWidth = 1220;
+    const auto rowWidth = 1342;
     auto centeredRow = area.withSizeKeepingCentre (rowWidth, area.getHeight());
-    const auto knobWidth = centeredRow.getWidth() / 10;
+    const auto knobWidth = centeredRow.getWidth() / 11;
 
     auto placeKnob = [knobWidth] (juce::Rectangle<int> slot, juce::Slider& slider, juce::Label& label)
     {
@@ -125,6 +127,7 @@ void RumbleRoomAudioProcessorEditor::resized()
     placeKnob (centeredRow.removeFromLeft (knobWidth), mixSlider, mixLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), wowSlider, wowLabel);
     placeKnob (centeredRow.removeFromLeft (knobWidth), diffuseSlider, diffuseLabel);
+    placeKnob (centeredRow.removeFromLeft (knobWidth), dampingSlider, dampingLabel);
 }
 
 void RumbleRoomAudioProcessorEditor::configureKnob (juce::Slider& slider, juce::Label& label, const juce::String& text)

@@ -25,6 +25,7 @@ RumbleRoomAudioProcessor::RumbleRoomAudioProcessor()
     mBpmParam       = apvts.getRawParameterValue ("bpm");
     mWowDepthParam  = apvts.getRawParameterValue ("wowDepth");
     mDiffusionParam = apvts.getRawParameterValue ("diffusion");
+    mDampingParam   = apvts.getRawParameterValue ("damping");
 }
 
 const juce::String RumbleRoomAudioProcessor::getName() const
@@ -140,6 +141,8 @@ void RumbleRoomAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     mEnvelopeLevel = 0.0f;
     mJitterAmount = 0.0f;
     mModPhase = 0.0f;
+    mDampStateL = 0.0f;
+    mDampStateR = 0.0f;
 
     const int diffLengths[kNumDiffStages] = { 557, 893, 1123, 1399 };
     const float diffSpeeds[kNumDiffStages] = { 0.35f, 0.57f, 0.79f, 1.11f };
@@ -367,7 +370,18 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             const auto inputSample = channelInput[channelIndex];
             const auto filteredSample = channelFiltered[channelIndex];
             const auto hpFilteredSample = channelHpFiltered[channelIndex];
-            const auto processedFb = std::tanh (hpFilteredSample * autoDampedFeedback) * 0.98f;
+            auto processedFb = std::tanh (hpFilteredSample * autoDampedFeedback) * 0.98f;
+
+            if (currentDiffusion > 0.001f)
+            {
+                const auto dampingHz = mDampingParam != nullptr ? mDampingParam->load() : 12000.0f;
+                const auto alpha = juce::jlimit (0.01f, 0.99f,
+                                                 std::exp (-juce::MathConstants<float>::twoPi * dampingHz / sampleRate));
+                auto& dampState = (channel == 0) ? mDampStateL : mDampStateR;
+
+                processedFb = (processedFb * (1.0f - alpha)) + (dampState * alpha);
+                dampState = processedFb;
+            }
 
             if (useStereoWidthMatrix)
             {
@@ -476,6 +490,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout RumbleRoomAudioProcessor::cr
                                                                     juce::NormalisableRange<float> (0.0f, 1.0f, 0.0001f), 0.15f));
     params.push_back (std::make_unique<juce::AudioParameterFloat> ("diffusion", "Diffusion",
                                                                     juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+    params.push_back (std::make_unique<juce::AudioParameterFloat> ("damping", "Damping",
+                                                                    juce::NormalisableRange<float> (200.0f, 20000.0f, 1.0f, 0.35f), 12000.0f));
     return { params.begin(), params.end() };
 }
 

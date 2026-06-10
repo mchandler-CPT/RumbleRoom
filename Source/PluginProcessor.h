@@ -64,6 +64,11 @@ private:
     std::atomic<float>* mBpmParam { nullptr };
     std::atomic<float>* mWowDepthParam { nullptr };
     std::atomic<float>* mDiffusionParam { nullptr };
+    std::atomic<float>* mDampingParam { nullptr };
+
+    // 1-Pole Lowpass Filter state variables (history buffers)
+    float mDampStateL = 0.0f;
+    float mDampStateR = 0.0f;
 
     // Tape pitch modulation (Wow & Flutter) variables
     float mModPhase { 0.0f };
