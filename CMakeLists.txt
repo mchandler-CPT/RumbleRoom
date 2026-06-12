@@ -77,6 +77,16 @@ target_sources(RumbleRoom PRIVATE
     Source/PluginEditor.h
     Source/UI/BoutiqueLookAndFeel.h
     Source/UI/BoutiqueLookAndFeel.cpp
+    Source/UI/BoutiqueKnobHelpers.h
+    Source/UI/BoutiqueKnobHelpers.cpp
+    Source/UI/BoutiqueLayoutConstants.h
+    Source/UI/ChromeTextButton.h
+    Source/UI/ChromeTextButton.cpp
+    Source/UI/HydraPalette.h
+    Source/UI/HydraPanelBackgroundLayout.h
+    Source/UI/HydraPanelBackgroundLayout.cpp
+    Source/UI/ProceduralDarkLookAndFeel.h
+    Source/UI/ProceduralDarkLookAndFeel.cpp
 )
 
 target_include_directories(RumbleRoom PRIVATE Source Source/UI)

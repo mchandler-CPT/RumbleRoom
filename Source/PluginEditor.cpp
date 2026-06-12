@@ -1,244 +1,322 @@
 #include "PluginEditor.h"
+#include "UI/BoutiqueLayoutConstants.h"
+#include "UI/HydraPalette.h"
+
+namespace
+{
+constexpr int kEditorWidth = 1080;
+constexpr int kModuleCount = 6;
+constexpr int kModuleTitleHeight = 22;
+constexpr int kModuleGap = 6;
+constexpr int kMasterStripWidth = 124;
+constexpr int kKnobCellWidth = 72;
+constexpr int kKnobCellHeight = 90;
+constexpr int kMixKnobCellWidth = 92;
+constexpr int kMixKnobCellHeight = 115;
+constexpr int kKnobLabelHeight = 14;
+constexpr int kModuleBottomInset = 6;
+constexpr int kControlPanelHeight = kModuleTitleHeight + (2 * kKnobCellHeight) + kModuleBottomInset;
+constexpr int kHeaderChromeHeight = BoutiqueLayout::kZoneGap + BoutiqueLayout::kHeaderHeight + BoutiqueLayout::kZoneGap;
+constexpr int kEditorHeight = kHeaderChromeHeight + kControlPanelHeight + (2 * BoutiqueLayout::kPanelHorizontalMargin);
+
+const juce::StringArray& subdivisionLabels()
+{
+    static const juce::StringArray labels { "8/1", "4/1", "2/1", "1/1", "1/2", "1/2T", "1/4", "1/4T",
+                                            "1/8", "1/8T", "1/16", "1/16T", "1/32", "1/64" };
+    return labels;
+}
+} // namespace
 
 RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioProcessor& p)
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
-    setLookAndFeel (&boutiqueLookAndFeel);
+    setSize (kEditorWidth, kEditorHeight);
+
     audioProcessor.apvts.addParameterListener ("sync", this);
-    audioProcessor.apvts.addParameterListener ("bpm", this);
 
-    configureKnob (sizeSlider, sizeLabel, "SIZE");
-    configureKnob (dampSlider, dampLabel, "DAMP");
-    configureKnob (brightSlider, brightLabel, "BRIGHT");
-    configureKnob (bounceSlider, bounceLabel, "BOUNCE");
-    configureKnob (gritSlider, gritLabel, "GRIT");
-    configureKnob (mWidthSlider, mWidthLabel, "WIDTH");
-    configureKnob (releaseSlider, releaseLabel, "RELEASE");
-    configureKnob (duckSlider, duckLabel, "DUCK");
-    configureKnob (mixSlider, mixLabel, "MIX");
-    configureKnob (wowSlider, wowLabel, "WOW");
-    configureKnob (wowSpeedSlider, wowSpeedLabel, "WOW SPD");
-    configureKnob (diffuseSlider, diffuseLabel, "DIFFUSE");
-    configureKnob (dampingSlider, dampingLabel, "DAMPING");
+    mSyncButton.setButtonText ("TEMPO SYNC");
+    addAndMakeVisible (mSyncButton);
+    mSyncAttachment = std::make_unique<ButtonAttachment> (audioProcessor.apvts, "sync", mSyncButton);
+    mSyncButton.onClick = [this]
+    {
+        updateDelayTimeControlMode();
+        resized();
+    };
 
-    syncLabel.setText ("SYNC", juce::dontSendNotification);
-    syncLabel.setJustificationType (juce::Justification::centredLeft);
-    syncLabel.setFont (juce::Font ("Times New Roman", 14.0f, juce::Font::bold));
-    syncLabel.setColour (juce::Label::textColourId, BoutiqueLookAndFeel::getCreamColour());
-    addAndMakeVisible (syncLabel);
+    configureRotaryKnob (mDelayTimeSlider, mDelayTimeLabel, "Delay Time", KnobReadoutKind::timeMilliseconds, customLookAndFeel, *this);
 
-    syncToggle.setClickingTogglesState (true);
-    addAndMakeVisible (syncToggle);
-    syncAttachment = std::make_unique<ButtonAttachment> (audioProcessor.apvts, "sync", syncToggle);
-    syncToggle.onClick = [this] { updateSizeControlMode(); };
+    configureRotaryKnob (mFeedbackSlider, mFeedbackLabel, "Feedback", KnobReadoutKind::percent, customLookAndFeel, *this);
+    mFeedbackAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "feedback", mFeedbackSlider);
 
-    bpmLabel.setText ("BPM", juce::dontSendNotification);
-    bpmLabel.setJustificationType (juce::Justification::centredLeft);
-    bpmLabel.setFont (juce::Font ("Times New Roman", 14.0f, juce::Font::bold));
-    bpmLabel.setColour (juce::Label::textColourId, BoutiqueLookAndFeel::getCreamColour());
-    addAndMakeVisible (bpmLabel);
+    configureRotaryKnob (mDuckDepthSlider, mDuckDepthLabel, "Suppress Depth", KnobReadoutKind::percent, customLookAndFeel, *this);
+    mDuckDepthAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "duckDepth", mDuckDepthSlider);
 
-    bpmEditor.setInputRestrictions (6, "0123456789.");
-    bpmEditor.setJustification (juce::Justification::centred);
-    bpmEditor.setColour (juce::TextEditor::backgroundColourId, juce::Colour (0x66241815));
-    bpmEditor.setColour (juce::TextEditor::textColourId, BoutiqueLookAndFeel::getCreamColour());
-    bpmEditor.setColour (juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
-    bpmEditor.addListener (this);
-    addAndMakeVisible (bpmEditor);
-    refreshBpmTextFromParameter();
+    configureRotaryKnob (mDuckReleaseSlider, mDuckReleaseLabel, "Suppress Release", KnobReadoutKind::timeSeconds, customLookAndFeel, *this);
+    mDuckReleaseAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "release", mDuckReleaseSlider);
 
-    sizeSlider.setScrollWheelEnabled (true);
-    updateSizeControlMode();
-    dampAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "cutoff", dampSlider);
-    brightAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "hpCutoff", brightSlider);
-    bounceAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "feedback", bounceSlider);
-    gritAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "grit", gritSlider);
+    configureRotaryKnob (mLowPassSlider, mLowPassLabel, "Low Pass", KnobReadoutKind::hertz, customLookAndFeel, *this, " Hz");
+    mLowPassAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "cutoff", mLowPassSlider);
+
+    configureRotaryKnob (mHighPassSlider, mHighPassLabel, "High Pass", KnobReadoutKind::hertz, customLookAndFeel, *this, " Hz");
+    mHighPassAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "hpCutoff", mHighPassSlider);
+
+    configureRotaryKnob (mDiffusionSlider, mDiffusionLabel, "Diffusion", KnobReadoutKind::percent, customLookAndFeel, *this);
+    mDiffusionAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "diffusion", mDiffusionSlider);
+
+    configureRotaryKnob (mFeedbackDampSlider, mFeedbackDampLabel, "Feedback Damp", KnobReadoutKind::hertz, customLookAndFeel, *this, " Hz");
+    mFeedbackDampAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "damping", mFeedbackDampSlider);
+
+    configureRotaryKnob (mWowSpeedSlider, mWowSpeedLabel, "Drift Rate", KnobReadoutKind::hertz, customLookAndFeel, *this, " Hz");
+    mWowSpeedAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "wowSpeed", mWowSpeedSlider);
+
+    configureRotaryKnob (mWowDepthSlider, mWowDepthLabel, "Drift Depth", KnobReadoutKind::percent, customLookAndFeel, *this);
+    mWowDepthAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "wowDepth", mWowDepthSlider);
+
+    configureRotaryKnob (mGritSlider, mGritLabel, "Drive", KnobReadoutKind::percent, customLookAndFeel, *this);
+    mGritAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "grit", mGritSlider);
+
+    configureRotaryKnob (mWidthSlider, mWidthLabel, "Stereo Width", KnobReadoutKind::percent, customLookAndFeel, *this);
     mWidthAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "width", mWidthSlider);
-    releaseAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "release", releaseSlider);
-    duckAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "duckDepth", duckSlider);
-    mixAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "dryWet", mixSlider);
-    wowAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "wowDepth", wowSlider);
-    wowSpeedAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "wowSpeed", wowSpeedSlider);
-    diffuseAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "diffusion", diffuseSlider);
-    dampingAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "damping", dampingSlider);
 
-    setSize (1632, 240);
+    configureRotaryKnob (mMixSlider, mMixLabel, "Mix", KnobReadoutKind::percent, customLookAndFeel, *this);
+    mMixAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "dryWet", mMixSlider);
+
+    updateDelayTimeControlMode();
 }
 
 RumbleRoomAudioProcessorEditor::~RumbleRoomAudioProcessorEditor()
 {
     audioProcessor.apvts.removeParameterListener ("sync", this);
-    audioProcessor.apvts.removeParameterListener ("bpm", this);
-    bpmEditor.removeListener (this);
-    setLookAndFeel (nullptr);
+
+    mDelayTimeSlider.setLookAndFeel (nullptr);
+    mFeedbackSlider.setLookAndFeel (nullptr);
+    mDuckDepthSlider.setLookAndFeel (nullptr);
+    mDuckReleaseSlider.setLookAndFeel (nullptr);
+    mLowPassSlider.setLookAndFeel (nullptr);
+    mHighPassSlider.setLookAndFeel (nullptr);
+    mDiffusionSlider.setLookAndFeel (nullptr);
+    mFeedbackDampSlider.setLookAndFeel (nullptr);
+    mWowSpeedSlider.setLookAndFeel (nullptr);
+    mWowDepthSlider.setLookAndFeel (nullptr);
+    mGritSlider.setLookAndFeel (nullptr);
+    mWidthSlider.setLookAndFeel (nullptr);
+    mMixSlider.setLookAndFeel (nullptr);
 }
 
-void RumbleRoomAudioProcessorEditor::paint (juce::Graphics& g)
+void RumbleRoomAudioProcessorEditor::refreshDelayTimeReadout()
 {
-    g.fillAll (BoutiqueLookAndFeel::getBackgroundColour());
-
-    auto bounds = getLocalBounds().toFloat();
-    auto titleArea = bounds.removeFromTop (44.0f);
-
-    g.setColour (BoutiqueLookAndFeel::getCreamColour().withAlpha (0.9f));
-    g.setFont (juce::Font ("Times New Roman", 24.0f, juce::Font::bold));
-    g.drawText ("RumbleRoom Boutique", titleArea.toNearestInt(), juce::Justification::centredLeft, true);
-
-    const auto jewelRadius = 9.0f;
-    const auto jewelCentre = juce::Point<float> (getWidth() - 32.0f, 24.0f);
-    const auto activeGlow = 0.82f;
-
-    g.setColour (juce::Colours::black.withAlpha (0.35f));
-    g.fillEllipse (jewelCentre.x - jewelRadius - 1.5f, jewelCentre.y - jewelRadius + 1.5f, jewelRadius * 2.0f, jewelRadius * 2.0f);
-
-    const auto glowAlpha = juce::jmap (activeGlow, 0.0f, 1.0f, 0.18f, 0.95f);
-    g.setColour (BoutiqueLookAndFeel::getAmberColour().withAlpha (glowAlpha));
-    g.fillEllipse (jewelCentre.x - jewelRadius, jewelCentre.y - jewelRadius, jewelRadius * 2.0f, jewelRadius * 2.0f);
-
-    g.setColour (juce::Colours::white.withAlpha (0.35f + (0.35f * activeGlow)));
-    g.fillEllipse (jewelCentre.x - (jewelRadius * 0.45f), jewelCentre.y - (jewelRadius * 0.65f), jewelRadius * 0.8f, jewelRadius * 0.8f);
-}
-
-void RumbleRoomAudioProcessorEditor::resized()
-{
-    auto area = getLocalBounds().reduced (20, 14);
-    auto topArea = area.removeFromTop (52);
-    auto syncPanel = topArea.removeFromRight (220).reduced (4, 6);
-    syncToggle.setBounds (syncPanel.removeFromLeft (24).withTrimmedTop (2));
-    syncLabel.setBounds (syncPanel.removeFromLeft (58));
-    bpmLabel.setBounds (syncPanel.removeFromLeft (38));
-    bpmEditor.setBounds (syncPanel.removeFromLeft (72).reduced (0, 2));
-
-    const auto rowWidth = 1586;
-    auto centeredRow = area.withSizeKeepingCentre (rowWidth, area.getHeight());
-    const auto knobWidth = centeredRow.getWidth() / 13;
-
-    auto placeKnob = [knobWidth] (juce::Rectangle<int> slot, juce::Slider& slider, juce::Label& label)
+    mDelayTimeSlider.textFromValueFunction = [this] (double value)
     {
-        auto column = slot.withWidth (knobWidth).reduced (10, 6);
-        auto labelArea = column.removeFromTop (28);
-        label.setBounds (labelArea);
-        slider.setBounds (column.reduced (2, 0));
+        const auto syncValue = audioProcessor.apvts.getRawParameterValue ("sync");
+        const auto syncEnabled = (syncValue != nullptr && syncValue->load() > 0.5f);
+
+        if (syncEnabled)
+        {
+            const auto& labels = subdivisionLabels();
+            return labels[juce::jlimit (0, labels.size() - 1, juce::roundToInt (value))];
+        }
+
+        return formatMillisecondsReadout (value);
     };
 
-    placeKnob (centeredRow.removeFromLeft (knobWidth), sizeSlider, sizeLabel);
-    placeKnob (centeredRow.removeFromLeft (knobWidth), dampSlider, dampLabel);
-    placeKnob (centeredRow.removeFromLeft (knobWidth), brightSlider, brightLabel);
-    placeKnob (centeredRow.removeFromLeft (knobWidth), bounceSlider, bounceLabel);
-    placeKnob (centeredRow.removeFromLeft (knobWidth), gritSlider, gritLabel);
-    placeKnob (centeredRow.removeFromLeft (knobWidth), mWidthSlider, mWidthLabel);
-    placeKnob (centeredRow.removeFromLeft (knobWidth), releaseSlider, releaseLabel);
-    placeKnob (centeredRow.removeFromLeft (knobWidth), duckSlider, duckLabel);
-    placeKnob (centeredRow.removeFromLeft (knobWidth), mixSlider, mixLabel);
-    placeKnob (centeredRow.removeFromLeft (knobWidth), wowSlider, wowLabel);
-    placeKnob (centeredRow.removeFromLeft (knobWidth), wowSpeedSlider, wowSpeedLabel);
-    placeKnob (centeredRow.removeFromLeft (knobWidth), diffuseSlider, diffuseLabel);
-    placeKnob (centeredRow.removeFromLeft (knobWidth), dampingSlider, dampingLabel);
+    mDelayTimeSlider.valueFromTextFunction = [this] (const juce::String& text)
+    {
+        const auto syncValue = audioProcessor.apvts.getRawParameterValue ("sync");
+        const auto syncEnabled = (syncValue != nullptr && syncValue->load() > 0.5f);
+
+        if (syncEnabled)
+        {
+            const auto idx = subdivisionLabels().indexOf (text.trim());
+            return idx >= 0 ? static_cast<double> (idx) : 6.0;
+        }
+
+        auto trimmed = text.trim();
+        if (trimmed.endsWithIgnoreCase ("ms"))
+            return trimmed.dropLastCharacters (2).trim().getDoubleValue();
+
+        if (trimmed.endsWithIgnoreCase ("s"))
+            return trimmed.dropLastCharacters (1).trim().getDoubleValue() * 1000.0;
+
+        return trimmed.getDoubleValue();
+    };
+
+    mDelayTimeSlider.updateText();
 }
 
-void RumbleRoomAudioProcessorEditor::configureKnob (juce::Slider& slider, juce::Label& label, const juce::String& text)
-{
-    slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 72, 20);
-    slider.setColour (juce::Slider::textBoxTextColourId, BoutiqueLookAndFeel::getCreamColour());
-    slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-    slider.setColour (juce::Slider::textBoxBackgroundColourId, juce::Colour (0x66241815));
-    addAndMakeVisible (slider);
-
-    label.setText (text, juce::dontSendNotification);
-    label.setJustificationType (juce::Justification::centred);
-    label.setFont (juce::Font ("Times New Roman", 17.0f, juce::Font::plain));
-    label.setColour (juce::Label::textColourId, BoutiqueLookAndFeel::getCreamColour());
-    addAndMakeVisible (label);
-}
-
-void RumbleRoomAudioProcessorEditor::updateSizeControlMode()
+void RumbleRoomAudioProcessorEditor::updateDelayTimeControlMode()
 {
     const auto syncValue = audioProcessor.apvts.getRawParameterValue ("sync");
     const auto syncEnabled = (syncValue != nullptr && syncValue->load() > 0.5f);
 
-    if (syncEnabled == sizeUsingSync && (sizeDelayAttachment != nullptr || sizeSubdivisionAttachment != nullptr))
+    if (syncEnabled == mDelayUsingSync && (mDelayTimeAttachment != nullptr || mSubdivisionAttachment != nullptr))
+    {
+        refreshDelayTimeReadout();
         return;
+    }
 
-    sizeDelayAttachment.reset();
-    sizeSubdivisionAttachment.reset();
+    mDelayTimeAttachment.reset();
+    mSubdivisionAttachment.reset();
 
     if (syncEnabled)
     {
-        sizeSlider.setRange (0.0, 13.0, 1.0);
-        sizeSlider.setNumDecimalPlacesToDisplay (0);
-        sizeSlider.setScrollWheelEnabled (true);
-        sizeSlider.textFromValueFunction = [] (double value)
-        {
-            static const juce::StringArray labels { "8/1", "4/1", "2/1", "1/1", "1/2", "1/2T", "1/4", "1/4T",
-                                                    "1/8", "1/8T", "1/16", "1/16T", "1/32", "1/64" };
-            const auto idx = juce::jlimit (0, labels.size() - 1, juce::roundToInt (value));
-            return labels[idx];
-        };
-        sizeSlider.valueFromTextFunction = [] (const juce::String& text)
-        {
-            static const juce::StringArray labels { "8/1", "4/1", "2/1", "1/1", "1/2", "1/2T", "1/4", "1/4T",
-                                                    "1/8", "1/8T", "1/16", "1/16T", "1/32", "1/64" };
-            const auto idx = labels.indexOf (text.trim());
-            return idx >= 0 ? static_cast<double> (idx) : 6.0;
-        };
-        sizeSubdivisionAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "subdivision", sizeSlider);
+        mDelayTimeLabel.setText ("Grid", juce::dontSendNotification);
+        mDelayTimeSlider.setRange (0.0, 13.0, 1.0);
+        mDelayTimeSlider.setSkewFactor (1.0);
+        mDelayTimeSlider.setNumDecimalPlacesToDisplay (0);
+        mSubdivisionAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "subdivision", mDelayTimeSlider);
     }
     else
     {
-        sizeSlider.setRange (0.1, 8000.0, 0.01);
-        sizeSlider.setSkewFactor (0.28);
-        sizeSlider.setNumDecimalPlacesToDisplay (1);
-        sizeSlider.setScrollWheelEnabled (false);
-        sizeSlider.textFromValueFunction = [] (double value) { return juce::String (value, 1) + " ms"; };
-        sizeSlider.valueFromTextFunction = nullptr;
-        sizeDelayAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "delayTime", sizeSlider);
+        mDelayTimeLabel.setText ("Delay Time", juce::dontSendNotification);
+        mDelayTimeSlider.setRange (0.1, 8000.0, 0.01);
+        mDelayTimeSlider.setSkewFactor (0.28);
+        applyKnobReadout (mDelayTimeSlider, KnobReadoutKind::timeMilliseconds);
+        mDelayTimeAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "delayTime", mDelayTimeSlider);
     }
 
-    sizeUsingSync = syncEnabled;
+    mDelayUsingSync = syncEnabled;
+    refreshDelayTimeReadout();
 }
 
 void RumbleRoomAudioProcessorEditor::parameterChanged (const juce::String& parameterID, float)
 {
-    if (parameterID == "sync" || parameterID == "bpm")
-        triggerAsyncUpdate();
-}
-
-void RumbleRoomAudioProcessorEditor::handleAsyncUpdate()
-{
-    updateSizeControlMode();
-    refreshBpmTextFromParameter();
-}
-
-void RumbleRoomAudioProcessorEditor::textEditorReturnKeyPressed (juce::TextEditor& editor)
-{
-    if (&editor == &bpmEditor)
-        pushBpmTextToParameter();
-}
-
-void RumbleRoomAudioProcessorEditor::textEditorFocusLost (juce::TextEditor& editor)
-{
-    if (&editor == &bpmEditor)
-        pushBpmTextToParameter();
-}
-
-void RumbleRoomAudioProcessorEditor::pushBpmTextToParameter()
-{
-    const auto entered = bpmEditor.getText().getFloatValue();
-    const auto clamped = juce::jlimit (40.0f, 260.0f, entered);
-    if (auto* param = audioProcessor.apvts.getParameter ("bpm"))
+    if (parameterID == "sync")
     {
-        const auto normalised = param->convertTo0to1 (clamped);
-        param->beginChangeGesture();
-        param->setValueNotifyingHost (normalised);
-        param->endChangeGesture();
+        updateDelayTimeControlMode();
+        resized();
     }
-    refreshBpmTextFromParameter();
 }
 
-void RumbleRoomAudioProcessorEditor::refreshBpmTextFromParameter()
+void RumbleRoomAudioProcessorEditor::alignKnobCell (juce::Rectangle<int> cell, juce::Slider& slider, juce::Label& label)
 {
-    const auto bpmValue = audioProcessor.apvts.getRawParameterValue ("bpm");
-    if (bpmValue != nullptr)
-        bpmEditor.setText (juce::String (bpmValue->load(), 1), juce::dontSendNotification);
+    const auto stackY = cell.getY() + ((cell.getHeight() - kKnobCellHeight) / 2);
+    label.setBounds (cell.getX(), stackY, cell.getWidth(), kKnobLabelHeight);
+
+    slider.setBounds (cell.getCentreX() - (kKnobCellWidth / 2),
+                      stackY + kKnobLabelHeight,
+                      kKnobCellWidth,
+                      kKnobCellHeight - kKnobLabelHeight);
+}
+
+void RumbleRoomAudioProcessorEditor::alignMixKnobCell (juce::Rectangle<int> cell, juce::Slider& slider, juce::Label& label)
+{
+    const auto stackY = cell.getY() + ((cell.getHeight() - kMixKnobCellHeight) / 2);
+    label.setBounds (cell.getX(), stackY, cell.getWidth(), kKnobLabelHeight);
+
+    slider.setBounds (cell.getCentreX() - (kMixKnobCellWidth / 2),
+                      stackY + kKnobLabelHeight,
+                      kMixKnobCellWidth,
+                      kMixKnobCellHeight - kKnobLabelHeight);
+}
+
+void RumbleRoomAudioProcessorEditor::layoutDualKnobModule (juce::Rectangle<int> module,
+                                                               juce::Slider& topSlider,
+                                                               juce::Label& topLabel,
+                                                               juce::Slider& bottomSlider,
+                                                               juce::Label& bottomLabel)
+{
+    module.removeFromTop (kModuleTitleHeight);
+    const auto halfH = module.getHeight() / 2;
+
+    alignKnobCell ({ module.getX(), module.getY(), module.getWidth(), halfH }, topSlider, topLabel);
+    alignKnobCell ({ module.getX(), module.getY() + halfH, module.getWidth(), halfH }, bottomSlider, bottomLabel);
+}
+
+void RumbleRoomAudioProcessorEditor::paint (juce::Graphics& g)
+{
+    g.fillAll (HydraPalette::colour (HydraPalette::backgroundBase));
+
+    auto bounds = getLocalBounds();
+
+    bounds.removeFromTop (BoutiqueLayout::kZoneGap);
+    auto headerArea = bounds.removeFromTop (BoutiqueLayout::kHeaderHeight);
+    bounds.removeFromTop (BoutiqueLayout::kZoneGap);
+
+    g.setColour (HydraPalette::colour (HydraPalette::backgroundTop));
+    g.fillRect (headerArea);
+
+    g.setColour (HydraPalette::colour (HydraPalette::borderMuted));
+    g.drawHorizontalLine (headerArea.getBottom() - 1, 0.0f, static_cast<float> (getWidth()));
+
+    g.setColour (HydraPalette::colour (HydraPalette::accentGoldBright));
+    g.setFont (juce::Font (juce::FontOptions { 18.0f, juce::Font::bold }));
+    g.drawText ("RumbleRoom",
+                BoutiqueLayout::kPanelHorizontalMargin,
+                headerArea.getY(),
+                200,
+                headerArea.getHeight(),
+                juce::Justification::centredLeft);
+
+    bounds.reduce (BoutiqueLayout::kPanelHorizontalMargin, 0);
+
+    auto masterBounds = bounds.removeFromRight (kMasterStripWidth);
+    bounds.removeFromRight (kModuleGap);
+
+    const auto moduleWidth = (bounds.getWidth() - (kModuleGap * (kModuleCount - 1))) / kModuleCount;
+
+    static const juce::StringArray moduleTitles { "LOOP GENERATION", "SUPPRESSION", "FREQUENCY",
+                                                  "REFLECTION", "DRIFT", "CHARACTER" };
+
+    const auto drawModuleFrame = [&g] (juce::Rectangle<int> moduleBounds, const juce::String& title)
+    {
+        g.setColour (HydraPalette::colour (HydraPalette::panelRaised));
+        g.fillRoundedRectangle (moduleBounds.toFloat(), 6.0f);
+
+        g.setColour (HydraPalette::colour (HydraPalette::borderMuted));
+        g.drawRoundedRectangle (moduleBounds.toFloat(), 6.0f, 1.0f);
+
+        auto titleArea = moduleBounds.removeFromTop (kModuleTitleHeight).reduced (BoutiqueLayout::kZoneCardInset + 2, 0);
+        g.setColour (HydraPalette::colour (HydraPalette::textMuted));
+        g.setFont (juce::Font (juce::FontOptions { 9.5f, juce::Font::bold }));
+        g.drawText (title, titleArea, juce::Justification::centred);
+    };
+
+    for (int i = 0; i < kModuleCount; ++i)
+    {
+        auto moduleBounds = bounds.removeFromLeft (moduleWidth);
+        if (i < kModuleCount - 1)
+            bounds.removeFromLeft (kModuleGap);
+
+        drawModuleFrame (moduleBounds, moduleTitles[i]);
+    }
+
+    drawModuleFrame (masterBounds, "MIX");
+}
+
+void RumbleRoomAudioProcessorEditor::resized()
+{
+    const auto syncY = BoutiqueLayout::kZoneGap
+                     + ((BoutiqueLayout::kHeaderHeight - BoutiqueLayout::kHarmonySnapButtonHeight) / 2);
+    mSyncButton.setBounds (getWidth() - BoutiqueLayout::kPanelHorizontalMargin - 104,
+                           syncY,
+                           104,
+                           BoutiqueLayout::kHarmonySnapButtonHeight);
+
+    auto bounds = getLocalBounds();
+    bounds.removeFromTop (kHeaderChromeHeight);
+    bounds.reduce (BoutiqueLayout::kPanelHorizontalMargin, 0);
+
+    auto masterArea = bounds.removeFromRight (kMasterStripWidth);
+    bounds.removeFromRight (kModuleGap);
+
+    const auto moduleWidth = (bounds.getWidth() - (kModuleGap * (kModuleCount - 1))) / kModuleCount;
+
+    auto takeModule = [&bounds, moduleWidth]() -> juce::Rectangle<int>
+    {
+        auto module = bounds.removeFromLeft (moduleWidth);
+        bounds.removeFromLeft (kModuleGap);
+        return module;
+    };
+
+    layoutDualKnobModule (takeModule(), mDelayTimeSlider, mDelayTimeLabel, mFeedbackSlider, mFeedbackLabel);
+    layoutDualKnobModule (takeModule(), mDuckDepthSlider, mDuckDepthLabel, mDuckReleaseSlider, mDuckReleaseLabel);
+    layoutDualKnobModule (takeModule(), mLowPassSlider, mLowPassLabel, mHighPassSlider, mHighPassLabel);
+    layoutDualKnobModule (takeModule(), mDiffusionSlider, mDiffusionLabel, mFeedbackDampSlider, mFeedbackDampLabel);
+    layoutDualKnobModule (takeModule(), mWowSpeedSlider, mWowSpeedLabel, mWowDepthSlider, mWowDepthLabel);
+    layoutDualKnobModule (takeModule(), mGritSlider, mGritLabel, mWidthSlider, mWidthLabel);
+
+    masterArea.removeFromTop (kModuleTitleHeight);
+    alignMixKnobCell (masterArea, mMixSlider, mMixLabel);
+
+    mSyncButton.toFront (false);
 }
