@@ -365,9 +365,6 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
         const auto jitterSamples = mJitterAmount * grit * 2.5f;
 
         const auto useStereoWidthMatrix = (totalOutputChannels == 2 && delayChannels >= 2);
-        constexpr auto widthTimeSpread = 0.2f;
-        const auto channelDelaySamplesL = delaySamples * (1.0f - (widthBlend * widthTimeSpread));
-        const auto channelDelaySamplesR = delaySamples * (1.0f + (widthBlend * widthTimeSpread));
         const auto autoDampedFeedback = juce::jlimit (0.0f, 0.99f, feedback);
 
         float inputL = 0.0f;
@@ -381,11 +378,12 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
             auto* channelData = buffer.getWritePointer (channel);
             auto* delayData = mDelayBuffer.getWritePointer (channel % delayChannels);
 
-            float channelDelaySamples = delaySamples;
-            if (useStereoWidthMatrix)
-                channelDelaySamples = (channel == 0) ? channelDelaySamplesL : channelDelaySamplesR;
-            else if (channel % 2 == 1)
+            auto channelDelaySamples = delaySamples;
+            if (! useStereoWidthMatrix && channel % 2 == 1)
+            {
+                // Simple parallel decorrelation for mono-to-stereo tracks
                 channelDelaySamples = delaySamples * (1.0f + decorrelationAmount);
+            }
 
             // CRITICAL FIX: Cap the max pointer swing to keep Wow musical at extreme lengths
             const auto maxSafeSwing = juce::jmin (channelDelaySamples * 0.80f, 150.0f);
@@ -466,16 +464,19 @@ void RumbleRoomAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, j
 
         if (useStereoWidthMatrix)
         {
-            const auto parallelL = inputL + fbL;
-            const auto parallelR = inputR + fbR;
-            const auto pingPongL = inputL + fbR;
-            const auto pingPongR = fbL;
+            // Clean, cross-coupled feedback matrix:
+            // At 0% Width, feedback stays parallel (Left -> Left, Right -> Right).
+            // At 100% Width, feedback crosses over completely on every bounce (Left -> Right, Right -> Left).
+            // This creates a flawless rhythmic ping-pong effect perfectly locked to the main delay clock,
+            // with absolute zero pointer crackling or artifact clicks!
             const auto parallelMix = 1.0f - widthBlend;
+            const auto crossMix = widthBlend;
 
             auto* delayL = mDelayBuffer.getWritePointer (0);
             auto* delayR = mDelayBuffer.getWritePointer (1);
-            delayL[mWritePosition] = (parallelMix * parallelL) + (widthBlend * pingPongL);
-            delayR[mWritePosition] = (parallelMix * parallelR) + (widthBlend * pingPongR);
+
+            delayL[mWritePosition] = inputL + (parallelMix * fbL) + (crossMix * fbR);
+            delayR[mWritePosition] = inputR + (parallelMix * fbR) + (crossMix * fbL);
         }
 
         // Brightness-following envelope drives the filter cutoff. It uses the dry peak
