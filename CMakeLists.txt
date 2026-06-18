@@ -48,6 +48,7 @@ juce_add_plugin(RumbleRoom
     PLUGIN_NAME "RumbleRoom"
     PRODUCT_NAME "RumbleRoom"
     DESCRIPTION "RumbleRoom Boutique Delay"
+    ICON_BIG Source/logo.png
 )
 
 if(APPLE)
@@ -66,6 +67,12 @@ set_target_properties(RumbleRoom PROPERTIES
 )
 
 juce_generate_juce_header(RumbleRoom)
+
+juce_add_binary_data(RumbleRoomAssets
+    HEADER_NAME RumbleRoomAssets.h
+    NAMESPACE RumbleRoomAssets
+    SOURCES Source/logo.png
+)
 
 # ==============================================================================
 # 4. SOURCE FILE COMPILATION
@@ -94,6 +101,7 @@ target_sources(RumbleRoom PRIVATE
 target_include_directories(RumbleRoom PRIVATE Source Source/UI)
 
 target_link_libraries(RumbleRoom PRIVATE
+    RumbleRoomAssets
     juce::juce_audio_utils
     juce::juce_audio_processors
     juce::juce_dsp

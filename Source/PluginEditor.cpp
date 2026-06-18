@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 #include "UI/BoutiqueLayoutConstants.h"
 #include "UI/HydraPalette.h"
+#include <RumbleRoomAssets.h>
 
 namespace
 {
@@ -31,6 +32,8 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
     setSize (kEditorWidth, kEditorHeight);
+
+    mLogoImage = juce::ImageCache::getFromMemory (RumbleRoomAssets::logo_png, RumbleRoomAssets::logo_pngSize);
 
     audioProcessor.apvts.addParameterListener ("sync", this);
 
@@ -355,14 +358,19 @@ void RumbleRoomAudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour (HydraPalette::colour (HydraPalette::borderMuted));
     g.drawHorizontalLine (headerArea.getBottom() - 1, 0.0f, static_cast<float> (getWidth()));
 
-    g.setColour (HydraPalette::colour (HydraPalette::accentGoldBright));
-    g.setFont (juce::Font (juce::FontOptions { 18.0f, juce::Font::bold }));
-    g.drawText ("RumbleRoom",
-                BoutiqueLayout::kPanelHorizontalMargin,
-                headerArea.getY(),
-                200,
-                headerArea.getHeight(),
-                juce::Justification::centredLeft);
+    if (mLogoImage.isValid())
+    {
+        constexpr int logoVerticalPad = 6;
+        const auto maxLogoHeight = headerArea.getHeight() - (2 * logoVerticalPad);
+        const auto aspect = static_cast<float> (mLogoImage.getWidth()) / static_cast<float> (mLogoImage.getHeight());
+        const auto logoWidth = juce::roundToInt (static_cast<float> (maxLogoHeight) * aspect);
+
+        const auto logoBounds = juce::Rectangle<int> (BoutiqueLayout::kPanelHorizontalMargin,
+                                                        headerArea.getCentreY() - maxLogoHeight / 2,
+                                                        logoWidth,
+                                                        maxLogoHeight);
+        g.drawImage (mLogoImage, logoBounds.toFloat());
+    }
 
     bounds.reduce (BoutiqueLayout::kPanelHorizontalMargin, 0);
 
