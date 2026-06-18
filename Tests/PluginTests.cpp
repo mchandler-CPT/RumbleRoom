@@ -15,3 +15,4 @@ TEST_CASE ("RumbleRoom exposes expected parameters", "[processor]")
     REQUIRE (processor.apvts.getParameter ("hpCutoff") != nullptr);
     REQUIRE (processor.apvts.getParameter ("cutoff") != nullptr);
 } 
+ 
