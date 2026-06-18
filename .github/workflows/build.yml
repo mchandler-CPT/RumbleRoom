@@ -244,29 +244,32 @@ jobs:
     needs: build-plugin
     runs-on: ubuntu-latest
     steps:
-      - name: Download build artifacts
+      # 1. Explicitly download the macOS build binary file
+      - name: Download macOS Artifact
         uses: actions/download-artifact@v4
         with:
-          pattern: rumbleroom-*
-          merge-multiple: true
-          path: artifacts
+          name: rumbleroom-macos
+          path: dist
 
+      # 2. Explicitly download the Windows setup installer file
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rumbleroom-windows-build
+          path: dist
+
+      # 3. Clean up names if they got nested inside sub-folders
       - name: Prepare release asset paths
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dist
-          INSTALLER="$(find artifacts -type f -name 'RumbleRoom_Installer_Signed.pkg' | head -n 1)"
-          SETUP="$(find artifacts -type f -name 'RumbleRoom_Setup.exe' | head -n 1)"
-          if [ -z "${INSTALLER}" ] || [ -z "${SETUP}" ]; then
-            echo "Missing release assets. Downloaded files:"
-            find artifacts -type f
-            exit 1
-          fi
-          cp "${INSTALLER}" dist/RumbleRoom_Installer_Signed.pkg
-          cp "${SETUP}" dist/RumbleRoom_Setup.exe
+          # Flatten any nested folders if download-artifact grouped them
+          find dist -type f -name "RumbleRoom_Installer_Signed.pkg" -exec cp {} dist/RumbleRoom_Installer_Signed.pkg \; 2>/dev/null || true
+          find dist -type f -name "RumbleRoom_Setup.exe" -exec cp {} dist/RumbleRoom_Setup.exe \; 2>/dev/null || true
+          echo "--- Staged Release Assets ---"
           ls -lah dist/
 
+      # 4. Ship the master bundles to your public release page
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
