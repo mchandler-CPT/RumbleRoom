@@ -57,14 +57,9 @@ if(APPLE)
         JUCE_AU_PLUGIN_CODE "RmRm"
         JUCE_PLUGIN_CODE "RmRm"
         JUCE_MANUFACTURER_CODE "bdEn"
+        JUCE_AU_MAIN_TYPE kAudioUnitType_Effect
     )
 endif()
-
-set_target_properties(RumbleRoom PROPERTIES
-    JUCE_PLUGIN_CODE "RmRm"
-    JUCE_MANUFACTURER_CODE "bdEn"
-    JUCE_AU_MAIN_TYPE kAudioUnitType_Effect
-)
 
 juce_generate_juce_header(RumbleRoom)
 
