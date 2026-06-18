@@ -37,8 +37,7 @@ private:
     juce::Image mLogoImage;
 
     ChromeTextButton mSyncButton;
-    ChromeTextButton mPrevButton, mNextButton;
-    ChromeActionButton mSaveButton, mSetFolderButton;
+    ChromeActionButton mPrevButton, mNextButton, mSaveButton, mSetFolderButton;
     juce::Label mPresetLabel;
 
     juce::Slider mDelayTimeSlider;
