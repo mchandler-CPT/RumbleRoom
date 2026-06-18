@@ -3,6 +3,7 @@
 #include <vector>
 
 #include <JuceHeader.h>
+#include "PresetManager.h"
 
 class RumbleRoomAudioProcessor : public juce::AudioProcessor
 {
@@ -39,9 +40,13 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
     float getInputMeterLevel() const noexcept;
 
+    PresetManager& getPresetManager() { return mPresetManager; }
+
     juce::AudioProcessorValueTreeState apvts;
 
 private:
+    PresetManager mPresetManager { apvts, "RumbleRoom", "BoutiqueAudio", ".rr" };
+
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     float applyWarmSaturation (float input, float gritAmount) const noexcept;
     static float applySoftSafetyLimit (float sample) noexcept;

@@ -526,21 +526,27 @@ juce::AudioProcessorEditor* RumbleRoomAudioProcessor::createEditor()
 
 void RumbleRoomAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    if (const auto state = apvts.copyState(); state.isValid())
-    {
-        std::unique_ptr<juce::XmlElement> xml (state.createXml());
+    auto stateTree = apvts.copyState();
+    stateTree.setProperty ("metaLoadedPresetName", mPresetManager.getCurrentPresetName(), nullptr);
+
+    if (auto xml = stateTree.createXml())
         copyXmlToBinary (*xml, destData);
-    }
 }
 
 void RumbleRoomAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
-    const std::unique_ptr<juce::XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
-    if (xmlState != nullptr)
+    if (data == nullptr || sizeInBytes <= 0)
+        return;
+
+    const std::unique_ptr<juce::XmlElement> xml (getXmlFromBinary (data, sizeInBytes));
+
+    if (xml != nullptr && xml->hasTagName (apvts.state.getType()))
     {
-        const auto newTree = juce::ValueTree::fromXml (*xmlState);
-        if (newTree.isValid())
-            apvts.replaceState (newTree);
+        const auto restoredTree = juce::ValueTree::fromXml (*xml);
+        apvts.replaceState (restoredTree);
+
+        if (restoredTree.hasProperty ("metaLoadedPresetName"))
+            mPresetManager.restorePresetNameFromSession (restoredTree.getProperty ("metaLoadedPresetName").toString());
     }
 }
 

@@ -73,6 +73,8 @@ juce_generate_juce_header(RumbleRoom)
 target_sources(RumbleRoom PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginProcessor.h
+    Source/PresetManager.cpp
+    Source/PresetManager.h
     Source/PluginEditor.cpp
     Source/PluginEditor.h
     Source/UI/BoutiqueLookAndFeel.h

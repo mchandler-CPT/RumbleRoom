@@ -43,6 +43,82 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
         resized();
     };
 
+    mPrevButton.setButtonText ("<");
+    mNextButton.setButtonText (">");
+    mSaveButton.setButtonText ("SAVE");
+    mSetFolderButton.setButtonText ("...");
+    mPresetLabel.setJustificationType (juce::Justification::centred);
+    mPresetLabel.setColour (juce::Label::textColourId, HydraPalette::colour (HydraPalette::accentGoldBright));
+
+    addAndMakeVisible (mPrevButton);
+    addAndMakeVisible (mNextButton);
+    addAndMakeVisible (mSaveButton);
+    addAndMakeVisible (mSetFolderButton);
+    addAndMakeVisible (mPresetLabel);
+
+    mPrevButton.onClick = [this]
+    {
+        audioProcessor.getPresetManager().loadPreviousPreset();
+        refreshPresetUi();
+    };
+
+    mNextButton.onClick = [this]
+    {
+        audioProcessor.getPresetManager().loadNextPreset();
+        refreshPresetUi();
+    };
+
+    mSaveButton.onClick = [this]
+    {
+        auto& pm = audioProcessor.getPresetManager();
+        const auto currentName = pm.getCurrentPresetName().isEmpty() ? "New Preset" : pm.getCurrentPresetName();
+
+        mPresetSaveChooser = std::make_unique<juce::FileChooser> (
+            "Save RumbleRoom Preset",
+            pm.getCurrentPresetDirectory().getChildFile (currentName).withFileExtension (".rr"),
+            "*.rr");
+
+        const auto flags = juce::FileBrowserComponent::saveMode
+                         | juce::FileBrowserComponent::canSelectFiles
+                         | juce::FileBrowserComponent::warnAboutOverwriting;
+
+        mPresetSaveChooser->launchAsync (flags, [this] (const juce::FileChooser& chooser)
+        {
+            const juce::File target = chooser.getResult();
+            if (target != juce::File{})
+            {
+                audioProcessor.getPresetManager().savePreset (target.getFileNameWithoutExtension());
+                refreshPresetUi();
+            }
+
+            mPresetSaveChooser.reset();
+        });
+    };
+
+    mSetFolderButton.onClick = [this]
+    {
+        auto& pm = audioProcessor.getPresetManager();
+
+        mPresetFolderChooser = std::make_unique<juce::FileChooser> (
+            "Select Preset Folder",
+            pm.getCurrentPresetDirectory());
+
+        const auto flags = juce::FileBrowserComponent::openMode
+                         | juce::FileBrowserComponent::canSelectDirectories;
+
+        mPresetFolderChooser->launchAsync (flags, [this] (const juce::FileChooser& chooser)
+        {
+            const juce::File target = chooser.getResult();
+            if (target != juce::File{})
+            {
+                audioProcessor.getPresetManager().setCustomPresetDirectory (target);
+                refreshPresetUi();
+            }
+
+            mPresetFolderChooser.reset();
+        });
+    };
+
     configureRotaryKnob (mDelayTimeSlider, mDelayTimeLabel, "Delay Time", KnobReadoutKind::timeMilliseconds, customLookAndFeel, *this);
 
     configureRotaryKnob (mFeedbackSlider, mFeedbackLabel, "Feedback", KnobReadoutKind::percent, customLookAndFeel, *this);
@@ -82,6 +158,7 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     mMixAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "dryWet", mMixSlider);
 
     updateDelayTimeControlMode();
+    refreshPresetUi();
 }
 
 RumbleRoomAudioProcessorEditor::~RumbleRoomAudioProcessorEditor()
@@ -176,6 +253,46 @@ void RumbleRoomAudioProcessorEditor::updateDelayTimeControlMode()
 
     mDelayUsingSync = syncEnabled;
     refreshDelayTimeReadout();
+}
+
+void RumbleRoomAudioProcessorEditor::refreshPresetUi()
+{
+    auto& pm = audioProcessor.getPresetManager();
+    pm.updatePresetList();
+
+    const bool hasPresets = ! pm.getPresetNames().isEmpty();
+    mPrevButton.setEnabled (hasPresets);
+    mNextButton.setEnabled (hasPresets);
+
+    mPresetLabel.setFont (juce::Font (juce::FontOptions { 14.0f, juce::Font::bold }));
+    mPresetLabel.setText (pm.getCurrentPresetName(), juce::dontSendNotification);
+}
+
+void RumbleRoomAudioProcessorEditor::layoutPresetHeader (juce::Rectangle<int> headerArea)
+{
+    // Width and layout definitions matching the hardware spec
+    constexpr int pNavWidth = 26;
+    constexpr int pActionWidth = 52;
+    constexpr int pFolderWidth = 30;
+    constexpr int pGap = 8;
+    constexpr int pInnerGap = 4;
+
+    auto row = headerArea.reduced (8, 4);
+    const auto actionY = row.getY() + ((row.getHeight() - 22) / 2);
+
+    auto actionCluster = row.removeFromRight (pActionWidth + pGap + pFolderWidth);
+    mSetFolderButton.setBounds (actionCluster.removeFromRight (pFolderWidth).withY (actionY).withHeight (22));
+    actionCluster.removeFromRight (pGap);
+    mSaveButton.setBounds (actionCluster.removeFromRight (pActionWidth).withY (actionY).withHeight (22));
+
+    // Center layout split parameters
+    const auto centerAreaX = (getWidth() - 180) / 2;
+    mPrevButton.setBounds (centerAreaX, actionY, pNavWidth, 22);
+    mNextButton.setBounds (centerAreaX + 180 - pNavWidth, actionY, pNavWidth, 22);
+
+    const auto labelLeft = mPrevButton.getRight() + pInnerGap;
+    const auto labelRight = mNextButton.getX() - pInnerGap;
+    mPresetLabel.setBounds (labelLeft, row.getY(), juce::jmax (0, labelRight - labelLeft), row.getHeight());
 }
 
 void RumbleRoomAudioProcessorEditor::parameterChanged (const juce::String& parameterID, float)
@@ -285,15 +402,19 @@ void RumbleRoomAudioProcessorEditor::paint (juce::Graphics& g)
 
 void RumbleRoomAudioProcessorEditor::resized()
 {
-    const auto syncY = BoutiqueLayout::kZoneGap
-                     + ((BoutiqueLayout::kHeaderHeight - BoutiqueLayout::kHarmonySnapButtonHeight) / 2);
-    mSyncButton.setBounds (getWidth() - BoutiqueLayout::kPanelHorizontalMargin - 104,
+    auto bounds = getLocalBounds();
+    bounds.removeFromTop (BoutiqueLayout::kZoneGap);
+    auto headerArea = bounds.removeFromTop (BoutiqueLayout::kHeaderHeight);
+    bounds.removeFromTop (BoutiqueLayout::kZoneGap);
+
+    layoutPresetHeader (headerArea);
+
+    const auto syncY = headerArea.getY() + ((headerArea.getHeight() - BoutiqueLayout::kHarmonySnapButtonHeight) / 2);
+    mSyncButton.setBounds (mSaveButton.getX() - 8 - 104,
                            syncY,
                            104,
                            BoutiqueLayout::kHarmonySnapButtonHeight);
 
-    auto bounds = getLocalBounds();
-    bounds.removeFromTop (kHeaderChromeHeight);
     bounds.reduce (BoutiqueLayout::kPanelHorizontalMargin, 0);
 
     auto masterArea = bounds.removeFromRight (kMasterStripWidth);
@@ -318,5 +439,10 @@ void RumbleRoomAudioProcessorEditor::resized()
     masterArea.removeFromTop (kModuleTitleHeight);
     alignMixKnobCell (masterArea, mMixSlider, mMixLabel);
 
+    mPrevButton.toFront (false);
+    mNextButton.toFront (false);
+    mSaveButton.toFront (false);
+    mSetFolderButton.toFront (false);
+    mPresetLabel.toFront (false);
     mSyncButton.toFront (false);
 }

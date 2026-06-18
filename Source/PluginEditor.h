@@ -20,6 +20,8 @@ public:
 private:
     void updateDelayTimeControlMode();
     void refreshDelayTimeReadout();
+    void refreshPresetUi();
+    void layoutPresetHeader (juce::Rectangle<int> headerArea);
     void parameterChanged (const juce::String& parameterID, float newValue) override;
 
     static void alignKnobCell (juce::Rectangle<int> cell, juce::Slider& slider, juce::Label& label);
@@ -34,6 +36,8 @@ private:
     ProceduralDarkLookAndFeel customLookAndFeel;
 
     ChromeTextButton mSyncButton;
+    ChromeTextButton mPrevButton, mNextButton, mSaveButton, mSetFolderButton;
+    juce::Label mPresetLabel;
 
     juce::Slider mDelayTimeSlider;
     juce::Slider mFeedbackSlider;
@@ -67,6 +71,7 @@ private:
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
 
     std::unique_ptr<ButtonAttachment> mSyncAttachment;
+    std::unique_ptr<juce::FileChooser> mPresetSaveChooser, mPresetFolderChooser;
     std::unique_ptr<SliderAttachment> mDelayTimeAttachment;
     std::unique_ptr<SliderAttachment> mSubdivisionAttachment;
     std::unique_ptr<SliderAttachment> mFeedbackAttachment;
