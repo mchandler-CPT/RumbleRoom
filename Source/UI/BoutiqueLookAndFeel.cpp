@@ -3,7 +3,7 @@
 namespace
 {
 const auto boutiqueBackground = juce::Colour (0xFF1A1512);
-const auto boutiqueAmber = juce::Colour (0xFFFFA500);
+const auto boutiqueAmber = juce::Colour (0xFFF09600);
 const auto boutiqueCopper = juce::Colour (0xFFB87333);
 const auto boutiqueCream = juce::Colour (0xFFF3E6D0);
 } // namespace

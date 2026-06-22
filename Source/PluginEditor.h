@@ -34,7 +34,7 @@ private:
 
     RumbleRoomAudioProcessor& audioProcessor;
     ProceduralDarkLookAndFeel customLookAndFeel;
-    juce::Image mLogoImage;
+    std::unique_ptr<juce::Drawable> mLogoDrawable;
 
     ChromeTextButton mSyncButton;
     ChromeActionButton mPrevButton, mNextButton, mSaveButton, mSetFolderButton;

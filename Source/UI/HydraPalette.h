@@ -12,11 +12,11 @@ constexpr juce::uint32 panelRaised = 0xff12100e;
 constexpr juce::uint32 panelRaisedEdge = 0xff1a1612;
 
 constexpr juce::uint32 borderMuted = 0xff322e2a;
-constexpr juce::uint32 accentGold = 0xffc4a574;
-constexpr juce::uint32 accentGoldDim = 0xff9a7d52;
-constexpr juce::uint32 accentGoldBright = 0xffdcc498;
-constexpr juce::uint32 accentDepthWarm = 0xffe0c090;
-constexpr juce::uint32 accentGirthWarm = 0xffd4a868;
+constexpr juce::uint32 accentGold = 0xffF09600;
+constexpr juce::uint32 accentGoldDim = 0xffC07800;
+constexpr juce::uint32 accentGoldBright = 0xffF5B535;
+constexpr juce::uint32 accentDepthWarm = 0xffF0A820;
+constexpr juce::uint32 accentGirthWarm = 0xffD98C00;
 
 constexpr juce::uint32 textMuted = 0xff9a948c;
 constexpr juce::uint32 textFooter = 0xff6a6560;

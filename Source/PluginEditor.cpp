@@ -33,7 +33,9 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
 {
     setSize (kEditorWidth, kEditorHeight);
 
-    mLogoImage = juce::ImageCache::getFromMemory (RumbleRoomAssets::logo_png, RumbleRoomAssets::logo_pngSize);
+    if (auto svgXml = juce::parseXML (juce::String::createStringFromData (RumbleRoomAssets::logo_svg,
+                                                                           RumbleRoomAssets::logo_svgSize)))
+        mLogoDrawable = juce::Drawable::createFromSVG (*svgXml);
 
     audioProcessor.apvts.addParameterListener ("sync", this);
 
@@ -358,18 +360,19 @@ void RumbleRoomAudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour (HydraPalette::colour (HydraPalette::borderMuted));
     g.drawHorizontalLine (headerArea.getBottom() - 1, 0.0f, static_cast<float> (getWidth()));
 
-    if (mLogoImage.isValid())
+    if (mLogoDrawable != nullptr)
     {
         constexpr int logoVerticalPad = 6;
         const auto maxLogoHeight = headerArea.getHeight() - (2 * logoVerticalPad);
-        const auto aspect = static_cast<float> (mLogoImage.getWidth()) / static_cast<float> (mLogoImage.getHeight());
+        const auto drawableBounds = mLogoDrawable->getDrawableBounds();
+        const auto aspect = drawableBounds.getWidth() / drawableBounds.getHeight();
         const auto logoWidth = juce::roundToInt (static_cast<float> (maxLogoHeight) * aspect);
 
-        const auto logoBounds = juce::Rectangle<int> (BoutiqueLayout::kPanelHorizontalMargin,
-                                                        headerArea.getCentreY() - maxLogoHeight / 2,
-                                                        logoWidth,
-                                                        maxLogoHeight);
-        g.drawImage (mLogoImage, logoBounds.toFloat());
+        const auto logoBounds = juce::Rectangle<float> (static_cast<float> (BoutiqueLayout::kPanelHorizontalMargin),
+                                                        static_cast<float> (headerArea.getCentreY()) - static_cast<float> (maxLogoHeight) / 2.0f,
+                                                        static_cast<float> (logoWidth),
+                                                        static_cast<float> (maxLogoHeight));
+        mLogoDrawable->drawWithin (g, logoBounds, juce::RectanglePlacement::centred, 1.0f);
     }
 
     bounds.reduce (BoutiqueLayout::kPanelHorizontalMargin, 0);
