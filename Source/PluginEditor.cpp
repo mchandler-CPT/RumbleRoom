@@ -197,6 +197,7 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     configureRotaryKnob (mDelayTimeSlider, mDelayTimeLabel, "Delay Time", KnobReadoutKind::timeMilliseconds, customLookAndFeel, *this);
 
     configureRotaryKnob (mFeedbackSlider, mFeedbackLabel, "Feedback", KnobReadoutKind::percent, customLookAndFeel, *this);
+    mFeedbackSlider.getProperties().set ("dangerZoneKnob", true);
     mFeedbackAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "feedback", mFeedbackSlider);
 
     configureRotaryKnob (mDuckDepthSlider, mDuckDepthLabel, "Suppress Depth", KnobReadoutKind::percent, customLookAndFeel, *this);
@@ -224,6 +225,7 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     mWowDepthAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "wowDepth", mWowDepthSlider);
 
     configureRotaryKnob (mGritSlider, mGritLabel, "Drive", KnobReadoutKind::percent, customLookAndFeel, *this);
+    mGritSlider.getProperties().set ("dangerZoneKnob", true);
     mGritAttachment = std::make_unique<SliderAttachment> (audioProcessor.apvts, "grit", mGritSlider);
 
     configureRotaryKnob (mWidthSlider, mWidthLabel, "Stereo Width", KnobReadoutKind::percent, customLookAndFeel, *this);

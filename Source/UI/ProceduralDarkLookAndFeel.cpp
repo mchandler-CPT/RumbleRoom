@@ -31,7 +31,7 @@ void ProceduralDarkLookAndFeel::drawRotarySlider (juce::Graphics& g,
                                                    const float sliderPosProportional,
                                                    const float rotaryStartAngle,
                                                    const float rotaryEndAngle,
-                                                   juce::Slider&)
+                                                   juce::Slider& slider)
 {
     const auto bounds = juce::Rectangle<float> (static_cast<float> (x), static_cast<float> (y),
                                                 static_cast<float> (width), static_cast<float> (height)).reduced (6.0f);
@@ -43,6 +43,7 @@ void ProceduralDarkLookAndFeel::drawRotarySlider (juce::Graphics& g,
 
     const auto gutterRadius = radius - 1.5f;
     const auto faceRadius = radius - 7.5f;
+    const auto dangerRadius = gutterRadius - 4.2f;
     const auto faceBounds = dialBounds.withSizeKeepingCentre (faceRadius * 2.0f, faceRadius * 2.0f);
 
     // 0. Cast shadow beneath the dial body for floating depth.
@@ -58,6 +59,29 @@ void ProceduralDarkLookAndFeel::drawRotarySlider (juce::Graphics& g,
 
     g.setColour (HydraPalette::colour (HydraPalette::dialTrack).darker (0.25f));
     g.strokePath (gutterRing, juce::PathStrokeType (3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    const bool isDangerZoneKnob = static_cast<bool> (slider.getProperties()["dangerZoneKnob"]);
+    if (isDangerZoneKnob)
+    {
+        const auto dangerStartAngle = juce::jmap (0.5f, 0.0f, 1.0f, rotaryStartAngle, rotaryEndAngle);
+        juce::Path dangerArc;
+        dangerArc.addCentredArc (centre.x, centre.y, dangerRadius, dangerRadius, 0.0f,
+                                 dangerStartAngle, rotaryEndAngle, true);
+
+        const auto redDanger = juce::Colour::fromRGB (0xCC, 0x2A, 0x2A);
+        g.setColour (redDanger.withAlpha (0.42f));
+        g.strokePath (dangerArc, juce::PathStrokeType (2.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+        if (sliderPosProportional > 0.5f)
+        {
+            const auto activeDanger = juce::jmap (sliderPosProportional, 0.5f, 1.0f, dangerStartAngle, rotaryEndAngle);
+            juce::Path activeDangerArc;
+            activeDangerArc.addCentredArc (centre.x, centre.y, dangerRadius, dangerRadius, 0.0f,
+                                           dangerStartAngle, activeDanger, true);
+            g.setColour (redDanger.withAlpha (0.88f));
+            g.strokePath (activeDangerArc, juce::PathStrokeType (2.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+    }
 
     // 2. Elevated inner knob face — metallic vertical gradient
     juce::ColourGradient faceGradient (HydraPalette::colour (HydraPalette::dialBodyTop), centre.x, faceBounds.getY(),
