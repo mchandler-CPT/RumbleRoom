@@ -381,8 +381,8 @@ void RumbleRoomAudioProcessorEditor::paint (juce::Graphics& g)
 
     const auto moduleWidth = (bounds.getWidth() - (kModuleGap * (kModuleCount - 1))) / kModuleCount;
 
-    static const juce::StringArray moduleTitles { "LOOP GENERATION", "SUPPRESSION", "FREQUENCY",
-                                                  "REFLECTION", "DRIFT", "CHARACTER" };
+    static const juce::StringArray moduleTitles { "LOOP GENERATION", "FREQUENCY", "CHARACTER",
+                                                  "REFLECTION", "DRIFT", "SUPPRESSION" };
 
     const auto drawModuleFrame = [&g] (juce::Rectangle<int> moduleBounds, const juce::String& title)
     {
@@ -449,11 +449,11 @@ void RumbleRoomAudioProcessorEditor::resized()
                                kSyncButtonSize,
                                kSyncButtonSize);
     }
-    layoutDualKnobModule (takeModule(), mDuckDepthSlider, mDuckDepthLabel, mDuckReleaseSlider, mDuckReleaseLabel);
     layoutDualKnobModule (takeModule(), mLowPassSlider, mLowPassLabel, mHighPassSlider, mHighPassLabel);
+    layoutDualKnobModule (takeModule(), mGritSlider, mGritLabel, mWidthSlider, mWidthLabel);
     layoutDualKnobModule (takeModule(), mDiffusionSlider, mDiffusionLabel, mFeedbackDampSlider, mFeedbackDampLabel);
     layoutDualKnobModule (takeModule(), mWowSpeedSlider, mWowSpeedLabel, mWowDepthSlider, mWowDepthLabel);
-    layoutDualKnobModule (takeModule(), mGritSlider, mGritLabel, mWidthSlider, mWidthLabel);
+    layoutDualKnobModule (takeModule(), mDuckDepthSlider, mDuckDepthLabel, mDuckReleaseSlider, mDuckReleaseLabel);
 
     masterArea.removeFromTop (kModuleTitleHeight);
     alignMixKnobCell (masterArea, mMixSlider, mMixLabel);
