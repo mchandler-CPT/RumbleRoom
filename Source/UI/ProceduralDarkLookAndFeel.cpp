@@ -45,6 +45,10 @@ void ProceduralDarkLookAndFeel::drawRotarySlider (juce::Graphics& g,
     const auto faceRadius = radius - 7.5f;
     const auto faceBounds = dialBounds.withSizeKeepingCentre (faceRadius * 2.0f, faceRadius * 2.0f);
 
+    // 0. Cast shadow beneath the dial body for floating depth.
+    g.setColour (juce::Colours::black.withAlpha (0.35f));
+    g.fillEllipse (dialBounds.translated (0.0f, 2.5f).reduced (1.0f));
+
     // 1. Dark recessed gutter ring
     juce::Path gutterRing;
     gutterRing.addCentredArc (centre.x, centre.y, gutterRadius, gutterRadius, 0.0f,
@@ -60,6 +64,15 @@ void ProceduralDarkLookAndFeel::drawRotarySlider (juce::Graphics& g,
                                        HydraPalette::colour (HydraPalette::dialBodyBottom), centre.x, faceBounds.getBottom(), false);
     g.setGradientFill (faceGradient);
     g.fillEllipse (faceBounds);
+
+    // 2b. Inner top shadow + lower catch-light for a domed feel.
+    juce::ColourGradient innerShade (juce::Colours::black.withAlpha (0.30f), centre.x, faceBounds.getY(),
+                                     juce::Colours::transparentBlack, centre.x, faceBounds.getCentreY(), false);
+    g.setGradientFill (innerShade);
+    g.fillEllipse (faceBounds);
+
+    g.setColour (juce::Colours::white.withAlpha (0.05f));
+    g.drawEllipse (faceBounds.reduced (0.5f).translated (0.0f, 0.8f), 1.0f);
 
     // 3. Outer highlight lip
     g.setColour (HydraPalette::colour (HydraPalette::accentGoldBright).withAlpha (0.22f));

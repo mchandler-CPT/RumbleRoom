@@ -16,15 +16,81 @@ constexpr int kMixKnobCellWidth = 92;
 constexpr int kMixKnobCellHeight = 115;
 constexpr int kKnobLabelHeight = 14;
 constexpr int kModuleBottomInset = 6;
+constexpr int kFooterHeight = 30;
 constexpr int kControlPanelHeight = kModuleTitleHeight + (2 * kKnobCellHeight) + kModuleBottomInset;
 constexpr int kHeaderChromeHeight = BoutiqueLayout::kZoneGap + BoutiqueLayout::kHeaderHeight + BoutiqueLayout::kZoneGap;
-constexpr int kEditorHeight = kHeaderChromeHeight + kControlPanelHeight + (2 * BoutiqueLayout::kPanelHorizontalMargin);
+constexpr int kEditorHeight = kHeaderChromeHeight + kControlPanelHeight + (2 * BoutiqueLayout::kPanelHorizontalMargin) + kFooterHeight;
 
 const juce::StringArray& subdivisionLabels()
 {
     static const juce::StringArray labels { "8/1", "4/1", "2/1", "1/1", "1/2", "1/2T", "1/4", "1/4T",
                                             "1/8", "1/8T", "1/16", "1/16T", "1/32", "1/64" };
     return labels;
+}
+
+void paintBackplate (juce::Graphics& g, juce::Rectangle<int> area)
+{
+    const auto areaF = area.toFloat();
+
+    juce::ColourGradient base (HydraPalette::colour (HydraPalette::backgroundTop), areaF.getX(), areaF.getY(),
+                               HydraPalette::colour (HydraPalette::backgroundBottom), areaF.getX(), areaF.getBottom(), false);
+    g.setGradientFill (base);
+    g.fillRect (area);
+
+    // Warm glow rising from the upper-centre, like panel lighting.
+    juce::ColourGradient glow (HydraPalette::colour (HydraPalette::backgroundWarmTint).withAlpha (0.40f),
+                               areaF.getCentreX(), areaF.getHeight() * 0.32f,
+                               juce::Colours::transparentBlack,
+                               areaF.getCentreX(), areaF.getBottom(),
+                               true);
+    g.setGradientFill (glow);
+    g.fillRect (area);
+
+    // Faint horizontal brushed-metal striations.
+    g.setColour (juce::Colours::white.withAlpha (0.012f));
+    for (int y = area.getY(); y < area.getBottom(); y += 3)
+        g.drawHorizontalLine (y, areaF.getX(), areaF.getRight());
+
+    // Edge vignette to lift the panel off the chrome.
+    juce::ColourGradient vignette (juce::Colours::transparentBlack,
+                                   areaF.getCentreX(), areaF.getCentreY(),
+                                   juce::Colours::black.withAlpha (0.55f),
+                                   areaF.getX(), areaF.getBottom(),
+                                   true);
+    g.setGradientFill (vignette);
+    g.fillRect (area);
+}
+
+void paintModuleCard (juce::Graphics& g, juce::Rectangle<int> moduleBounds, const juce::String& title)
+{
+    const auto cardF = moduleBounds.toFloat();
+
+    juce::Path cardPath;
+    cardPath.addRoundedRectangle (cardF, 6.0f);
+    juce::DropShadow shadow (juce::Colours::black.withAlpha (0.50f), 9, { 0, 3 });
+    shadow.drawForPath (g, cardPath);
+
+    juce::ColourGradient body (HydraPalette::colour (HydraPalette::panelRaisedEdge), cardF.getX(), cardF.getY(),
+                               HydraPalette::colour (HydraPalette::panelRaised), cardF.getX(), cardF.getBottom(), false);
+    g.setGradientFill (body);
+    g.fillRoundedRectangle (cardF, 6.0f);
+
+    // Top sheen.
+    g.setColour (juce::Colours::white.withAlpha (0.045f));
+    g.drawLine (cardF.getX() + 7.0f, cardF.getY() + 1.2f, cardF.getRight() - 7.0f, cardF.getY() + 1.2f, 1.0f);
+
+    g.setColour (HydraPalette::colour (HydraPalette::borderHighlight));
+    g.drawRoundedRectangle (cardF.reduced (0.5f), 6.0f, 1.0f);
+
+    auto titleArea = moduleBounds.removeFromTop (kModuleTitleHeight).reduced (BoutiqueLayout::kZoneCardInset + 2, 0);
+    g.setColour (HydraPalette::colour (HydraPalette::textTitle));
+    g.setFont (juce::Font (juce::FontOptions { 9.5f, juce::Font::bold }));
+    g.drawText (title, titleArea, juce::Justification::centred);
+
+    // Plain divider beneath the title.
+    const auto dividerY = static_cast<float> (moduleBounds.getY());
+    g.setColour (HydraPalette::colour (HydraPalette::borderMuted).withAlpha (0.85f));
+    g.fillRect (cardF.getX() + 8.0f, dividerY - 1.0f, cardF.getWidth() - 16.0f, 1.0f);
 }
 } // namespace
 
@@ -324,8 +390,7 @@ void RumbleRoomAudioProcessorEditor::alignKnobCell (juce::Rectangle<int> cell, j
 
 void RumbleRoomAudioProcessorEditor::alignMixKnobCell (juce::Rectangle<int> cell, juce::Slider& slider, juce::Label& label)
 {
-    constexpr int kMixKnobBottomInset = 14;
-    const auto stackY = cell.getBottom() - kMixKnobCellHeight - kMixKnobBottomInset;
+    const auto stackY = cell.getY() + ((cell.getHeight() - kMixKnobCellHeight) / 2);
     label.setBounds (cell.getX(), stackY, cell.getWidth(), kKnobLabelHeight);
 
     slider.setBounds (cell.getCentreX() - (kMixKnobCellWidth / 2),
@@ -349,7 +414,7 @@ void RumbleRoomAudioProcessorEditor::layoutDualKnobModule (juce::Rectangle<int> 
 
 void RumbleRoomAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (HydraPalette::colour (HydraPalette::backgroundBase));
+    paintBackplate (g, getLocalBounds());
 
     auto bounds = getLocalBounds();
 
@@ -357,17 +422,21 @@ void RumbleRoomAudioProcessorEditor::paint (juce::Graphics& g)
     auto headerArea = bounds.removeFromTop (BoutiqueLayout::kHeaderHeight);
     bounds.removeFromTop (BoutiqueLayout::kZoneGap);
 
-    g.setColour (HydraPalette::colour (HydraPalette::backgroundTop));
+    auto footerArea = bounds.removeFromBottom (kFooterHeight);
+
+    juce::ColourGradient headerFill (HydraPalette::colour (HydraPalette::backgroundTop), 0.0f, static_cast<float> (headerArea.getY()),
+                                     HydraPalette::colour (HydraPalette::backgroundBase), 0.0f, static_cast<float> (headerArea.getBottom()), false);
+    g.setGradientFill (headerFill);
     g.fillRect (headerArea);
 
-    g.setColour (HydraPalette::colour (HydraPalette::borderMuted));
+    g.setColour (HydraPalette::colour (HydraPalette::accentGold).withAlpha (0.30f));
     g.drawHorizontalLine (headerArea.getBottom() - 1, 0.0f, static_cast<float> (getWidth()));
 
     constexpr int logoVerticalPad = 6;
     constexpr int mainLogoRightShift = 5;
     const auto maxLogoHeight = headerArea.getHeight() - (2 * logoVerticalPad);
     const auto logoTop = static_cast<float> (headerArea.getCentreY()) - static_cast<float> (maxLogoHeight) / 2.0f;
-    float drawX = static_cast<float> (BoutiqueLayout::kPanelHorizontalMargin + mainLogoRightShift);
+    const float drawX = static_cast<float> (BoutiqueLayout::kPanelHorizontalMargin + mainLogoRightShift);
 
     if (mLogoDrawable != nullptr)
     {
@@ -388,46 +457,39 @@ void RumbleRoomAudioProcessorEditor::paint (juce::Graphics& g)
     static const juce::StringArray moduleTitles { "LOOP GENERATION", "FREQUENCY", "CHARACTER",
                                                   "REFLECTION", "DRIFT", "SUPPRESSION" };
 
-    const auto drawModuleFrame = [&g] (juce::Rectangle<int> moduleBounds, const juce::String& title)
-    {
-        g.setColour (HydraPalette::colour (HydraPalette::panelRaised));
-        g.fillRoundedRectangle (moduleBounds.toFloat(), 6.0f);
-
-        g.setColour (HydraPalette::colour (HydraPalette::borderMuted));
-        g.drawRoundedRectangle (moduleBounds.toFloat(), 6.0f, 1.0f);
-
-        auto titleArea = moduleBounds.removeFromTop (kModuleTitleHeight).reduced (BoutiqueLayout::kZoneCardInset + 2, 0);
-        g.setColour (HydraPalette::colour (HydraPalette::textMuted));
-        g.setFont (juce::Font (juce::FontOptions { 9.5f, juce::Font::bold }));
-        g.drawText (title, titleArea, juce::Justification::centred);
-    };
-
     for (int i = 0; i < kModuleCount; ++i)
     {
         auto moduleBounds = bounds.removeFromLeft (moduleWidth);
         if (i < kModuleCount - 1)
             bounds.removeFromLeft (kModuleGap);
 
-        drawModuleFrame (moduleBounds, moduleTitles[i]);
+        paintModuleCard (g, moduleBounds, moduleTitles[i]);
     }
 
-    drawModuleFrame (masterBounds, "MIX");
+    paintModuleCard (g, masterBounds, "MIX");
+
+    // Footer: product identity on the left, bdEnergy mark on the right.
+    g.setColour (HydraPalette::colour (HydraPalette::borderMuted).withAlpha (0.6f));
+    g.drawHorizontalLine (footerArea.getY(), static_cast<float> (BoutiqueLayout::kPanelHorizontalMargin),
+                          static_cast<float> (getWidth() - BoutiqueLayout::kPanelHorizontalMargin));
+
+    auto footerRow = footerArea.reduced (BoutiqueLayout::kPanelHorizontalMargin, 0);
+
+    g.setFont (juce::Font (juce::FontOptions { 11.0f, juce::Font::plain }));
+    g.setColour (HydraPalette::colour (HydraPalette::textFooter));
+    g.drawText ("RUMBLE ROOM  //  BOUTIQUE DELAY", footerRow.getX(), footerRow.getY(), 320, footerRow.getHeight(),
+                juce::Justification::centredLeft, false);
 
     if (mBdEnergyLogoDrawable != nullptr)
     {
-        constexpr int kMixLogoHeight = 26;
-        constexpr int kMixLogoTopPad = 4;
-        auto mixBodyArea = masterBounds;
-        mixBodyArea.removeFromTop (kModuleTitleHeight + kMixLogoTopPad);
+        constexpr int kFooterLogoHeight = 18;
         const auto drawableBounds = mBdEnergyLogoDrawable->getDrawableBounds();
         const auto aspect = drawableBounds.getWidth() / drawableBounds.getHeight();
-        const auto logoWidth = juce::roundToInt (static_cast<float> (kMixLogoHeight) * aspect);
-        const auto logoX = mixBodyArea.getCentreX() - (logoWidth / 2);
-        const auto logoY = mixBodyArea.getY();
-        const auto logoBounds = juce::Rectangle<float> (static_cast<float> (logoX),
-                                                        static_cast<float> (logoY),
+        const auto logoWidth = juce::roundToInt (static_cast<float> (kFooterLogoHeight) * aspect);
+        const auto logoBounds = juce::Rectangle<float> (static_cast<float> (footerRow.getRight() - logoWidth),
+                                                        static_cast<float> (footerRow.getCentreY() - kFooterLogoHeight / 2),
                                                         static_cast<float> (logoWidth),
-                                                        static_cast<float> (kMixLogoHeight));
+                                                        static_cast<float> (kFooterLogoHeight));
         mBdEnergyLogoDrawable->drawWithin (g, logoBounds, juce::RectanglePlacement::centred, 1.0f);
     }
 }
@@ -441,6 +503,7 @@ void RumbleRoomAudioProcessorEditor::resized()
 
     layoutPresetHeader (headerArea);
 
+    bounds.removeFromBottom (kFooterHeight);
     bounds.reduce (BoutiqueLayout::kPanelHorizontalMargin, 0);
 
     auto masterArea = bounds.removeFromRight (kMasterStripWidth);
