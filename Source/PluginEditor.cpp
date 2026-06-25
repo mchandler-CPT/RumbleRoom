@@ -39,7 +39,8 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
 
     audioProcessor.apvts.addParameterListener ("sync", this);
 
-    mSyncButton.setButtonText ("TEMPO SYNC");
+    mSyncButton.setButtonText ("s");
+    mSyncButton.setTooltip ("Tempo Sync");
     addAndMakeVisible (mSyncButton);
     mSyncAttachment = std::make_unique<ButtonAttachment> (audioProcessor.apvts, "sync", mSyncButton);
     mSyncButton.onClick = [this]
@@ -420,12 +421,6 @@ void RumbleRoomAudioProcessorEditor::resized()
 
     layoutPresetHeader (headerArea);
 
-    const auto syncY = headerArea.getY() + ((headerArea.getHeight() - BoutiqueLayout::kHarmonySnapButtonHeight) / 2);
-    mSyncButton.setBounds (mSaveButton.getX() - 8 - 104,
-                           syncY,
-                           104,
-                           BoutiqueLayout::kHarmonySnapButtonHeight);
-
     bounds.reduce (BoutiqueLayout::kPanelHorizontalMargin, 0);
 
     auto masterArea = bounds.removeFromRight (kMasterStripWidth);
@@ -440,7 +435,22 @@ void RumbleRoomAudioProcessorEditor::resized()
         return module;
     };
 
-    layoutDualKnobModule (takeModule(), mDelayTimeSlider, mDelayTimeLabel, mFeedbackSlider, mFeedbackLabel);
+    auto loopGenModule = takeModule();
+    layoutDualKnobModule (loopGenModule, mDelayTimeSlider, mDelayTimeLabel, mFeedbackSlider, mFeedbackLabel);
+    {
+        constexpr int kSyncButtonSize = 18;
+        constexpr int kSyncButtonLeftNudge = 12;
+        const auto delayKnobBounds = mDelayTimeSlider.getBounds();
+        const int gapStart = delayKnobBounds.getRight();
+        const int gapEnd = loopGenModule.getRight();
+        const int syncCentreX = gapStart + ((gapEnd - gapStart) / 2) - kSyncButtonLeftNudge;
+        const int syncCentreY = delayKnobBounds.getCentreY() - (BoutiqueLayout::kCutoffTextBoxHeight / 2);
+
+        mSyncButton.setBounds (syncCentreX - (kSyncButtonSize / 2),
+                               syncCentreY - (kSyncButtonSize / 2),
+                               kSyncButtonSize,
+                               kSyncButtonSize);
+    }
     layoutDualKnobModule (takeModule(), mDuckDepthSlider, mDuckDepthLabel, mDuckReleaseSlider, mDuckReleaseLabel);
     layoutDualKnobModule (takeModule(), mLowPassSlider, mLowPassLabel, mHighPassSlider, mHighPassLabel);
     layoutDualKnobModule (takeModule(), mDiffusionSlider, mDiffusionLabel, mFeedbackDampSlider, mFeedbackDampLabel);
