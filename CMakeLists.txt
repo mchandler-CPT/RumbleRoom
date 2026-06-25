@@ -48,7 +48,7 @@ juce_add_plugin(RumbleRoom
     PLUGIN_NAME "RumbleRoom"
     PRODUCT_NAME "RumbleRoom"
     DESCRIPTION "RumbleRoom Boutique Delay"
-    ICON_BIG Source/logo.png
+    ICON_BIG assets/logo.png
 )
 
 if(APPLE)
@@ -66,7 +66,7 @@ juce_generate_juce_header(RumbleRoom)
 juce_add_binary_data(RumbleRoomAssets
     HEADER_NAME RumbleRoomAssets.h
     NAMESPACE RumbleRoomAssets
-    SOURCES Source/logo.svg
+    SOURCES assets/logo.svg
 )
 
 # ==============================================================================
