@@ -66,7 +66,9 @@ juce_generate_juce_header(RumbleRoom)
 juce_add_binary_data(RumbleRoomAssets
     HEADER_NAME RumbleRoomAssets.h
     NAMESPACE RumbleRoomAssets
-    SOURCES assets/logo.svg
+    SOURCES
+        assets/logo.svg
+        assets/bdEnergyLogo.svg
 )
 
 # ==============================================================================

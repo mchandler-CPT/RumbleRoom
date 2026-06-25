@@ -36,6 +36,9 @@ RumbleRoomAudioProcessorEditor::RumbleRoomAudioProcessorEditor (RumbleRoomAudioP
     if (auto svgXml = juce::parseXML (juce::String::createStringFromData (RumbleRoomAssets::logo_svg,
                                                                            RumbleRoomAssets::logo_svgSize)))
         mLogoDrawable = juce::Drawable::createFromSVG (*svgXml);
+    if (auto bdSvgXml = juce::parseXML (juce::String::createStringFromData (RumbleRoomAssets::bdEnergyLogo_svg,
+                                                                             RumbleRoomAssets::bdEnergyLogo_svgSize)))
+        mBdEnergyLogoDrawable = juce::Drawable::createFromSVG (*bdSvgXml);
 
     audioProcessor.apvts.addParameterListener ("sync", this);
 
@@ -321,7 +324,8 @@ void RumbleRoomAudioProcessorEditor::alignKnobCell (juce::Rectangle<int> cell, j
 
 void RumbleRoomAudioProcessorEditor::alignMixKnobCell (juce::Rectangle<int> cell, juce::Slider& slider, juce::Label& label)
 {
-    const auto stackY = cell.getY() + ((cell.getHeight() - kMixKnobCellHeight) / 2);
+    constexpr int kMixKnobBottomInset = 14;
+    const auto stackY = cell.getBottom() - kMixKnobCellHeight - kMixKnobBottomInset;
     label.setBounds (cell.getX(), stackY, cell.getWidth(), kKnobLabelHeight);
 
     slider.setBounds (cell.getCentreX() - (kMixKnobCellWidth / 2),
@@ -359,18 +363,18 @@ void RumbleRoomAudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour (HydraPalette::colour (HydraPalette::borderMuted));
     g.drawHorizontalLine (headerArea.getBottom() - 1, 0.0f, static_cast<float> (getWidth()));
 
+    constexpr int logoVerticalPad = 6;
+    constexpr int mainLogoRightShift = 5;
+    const auto maxLogoHeight = headerArea.getHeight() - (2 * logoVerticalPad);
+    const auto logoTop = static_cast<float> (headerArea.getCentreY()) - static_cast<float> (maxLogoHeight) / 2.0f;
+    float drawX = static_cast<float> (BoutiqueLayout::kPanelHorizontalMargin + mainLogoRightShift);
+
     if (mLogoDrawable != nullptr)
     {
-        constexpr int logoVerticalPad = 6;
-        const auto maxLogoHeight = headerArea.getHeight() - (2 * logoVerticalPad);
         const auto drawableBounds = mLogoDrawable->getDrawableBounds();
         const auto aspect = drawableBounds.getWidth() / drawableBounds.getHeight();
         const auto logoWidth = juce::roundToInt (static_cast<float> (maxLogoHeight) * aspect);
-
-        const auto logoBounds = juce::Rectangle<float> (static_cast<float> (BoutiqueLayout::kPanelHorizontalMargin),
-                                                        static_cast<float> (headerArea.getCentreY()) - static_cast<float> (maxLogoHeight) / 2.0f,
-                                                        static_cast<float> (logoWidth),
-                                                        static_cast<float> (maxLogoHeight));
+        const auto logoBounds = juce::Rectangle<float> (drawX, logoTop, static_cast<float> (logoWidth), static_cast<float> (maxLogoHeight));
         mLogoDrawable->drawWithin (g, logoBounds, juce::RectanglePlacement::centred, 1.0f);
     }
 
@@ -408,6 +412,24 @@ void RumbleRoomAudioProcessorEditor::paint (juce::Graphics& g)
     }
 
     drawModuleFrame (masterBounds, "MIX");
+
+    if (mBdEnergyLogoDrawable != nullptr)
+    {
+        constexpr int kMixLogoHeight = 26;
+        constexpr int kMixLogoTopPad = 4;
+        auto mixBodyArea = masterBounds;
+        mixBodyArea.removeFromTop (kModuleTitleHeight + kMixLogoTopPad);
+        const auto drawableBounds = mBdEnergyLogoDrawable->getDrawableBounds();
+        const auto aspect = drawableBounds.getWidth() / drawableBounds.getHeight();
+        const auto logoWidth = juce::roundToInt (static_cast<float> (kMixLogoHeight) * aspect);
+        const auto logoX = mixBodyArea.getCentreX() - (logoWidth / 2);
+        const auto logoY = mixBodyArea.getY();
+        const auto logoBounds = juce::Rectangle<float> (static_cast<float> (logoX),
+                                                        static_cast<float> (logoY),
+                                                        static_cast<float> (logoWidth),
+                                                        static_cast<float> (kMixLogoHeight));
+        mBdEnergyLogoDrawable->drawWithin (g, logoBounds, juce::RectanglePlacement::centred, 1.0f);
+    }
 }
 
 void RumbleRoomAudioProcessorEditor::resized()
