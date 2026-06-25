@@ -242,7 +242,6 @@ void RumbleRoomAudioProcessorEditor::updateDelayTimeControlMode()
 
     if (syncEnabled)
     {
-        mDelayTimeLabel.setText ("Grid", juce::dontSendNotification);
         mDelayTimeSlider.setRange (0.0, 13.0, 1.0);
         mDelayTimeSlider.setSkewFactor (1.0);
         mDelayTimeSlider.setNumDecimalPlacesToDisplay (0);
@@ -250,7 +249,6 @@ void RumbleRoomAudioProcessorEditor::updateDelayTimeControlMode()
     }
     else
     {
-        mDelayTimeLabel.setText ("Delay Time", juce::dontSendNotification);
         mDelayTimeSlider.setRange (0.1, 8000.0, 0.01);
         mDelayTimeSlider.setSkewFactor (0.28);
         applyKnobReadout (mDelayTimeSlider, KnobReadoutKind::timeMilliseconds);
